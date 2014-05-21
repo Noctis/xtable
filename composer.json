@@ -18,7 +18,7 @@
         "phpoffice/phpexcel": "1.7.9"
     },
     "autoload": {
-        "psr-0": {
+        "psr-4": {
             "Noctis\\": "src/"
         }
     }
