@@ -1,0 +1,20 @@
+{
+    "name": "noctis/xtable",
+    "type": "library",
+    "description": "Simple wrapper for PHPExcel",
+    "keywords": ["excel","phpexcel","xtable","wrapper"],
+    "homepage": "https://github.com/Noctis/xtable",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Lucas Czejgis",
+            "email": "lucas.czejgis@gmail.com",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": ">=5.3.0",
+        "ext-multibyte": "*",
+        "phpoffice/phpexcel": "1.7.9"
+    }
+}
