@@ -16,5 +16,10 @@
         "php": ">=5.3.0",
         "ext-mbstring": "*",
         "phpoffice/phpexcel": "1.7.9"
+    },
+    "autoload": {
+        "psr-0": {
+            "Noctis": "src/"
+        }
     }
 }
