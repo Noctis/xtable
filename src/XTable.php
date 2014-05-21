@@ -1,5 +1,5 @@
 <?php
-namespace OpenNexus\Bundle\PlatformBundle\Util;
+namespace Noctis;
 
 use \PHPExcel;
 use \PHPExcel_Style_Border;
@@ -258,6 +258,7 @@ class XTable
      *
      * @param integer $row Numer wiersza (opcjonalnie)
      * @param integer $coll Numer wiersza (opcjonalnie)
+     *
      * @return string Nazwa (współrzędne) komórki
      */
     public function toCoords($row = null, $coll = null)
@@ -315,7 +316,7 @@ class XTable
     /**
      * Zwraca skoroszyt
      *
-     * @return sfPhpExcel Skoroszyt
+     * @return PHPExcel Skoroszyt
      */
     public function getExcel()
     {
@@ -592,6 +593,7 @@ class XTable
      * Zwraca ilość znaków nowego wiersza w podanym ciągu znaków
      *
      * @param string $string Badany ciąg znaków
+     *
      * @return integer
      */
     private function countNewlines($string)
@@ -694,6 +696,7 @@ class XTable
      * Jeżeli zakres nie jest znany, nic nie jest parametryzowane.
      *
      * @param array $options Parametry
+     *
      * @return void
      */
     public function setRangeOptions($options = array())
@@ -1061,7 +1064,7 @@ class XTable
      *
      * @param \PHPExcel $excel Skoroszyt
      *
-     * @return \OpenNexus\Bundle\PlatformBundle\Util\XTable
+     * @return XTable
      */
     public function loadExistingExcel(\PHPExcel $excel)
     {
@@ -1079,7 +1082,7 @@ class XTable
      * @param string $title Tytuł/nazwa nowego arkusza
      * @param array $options Opcje
      *
-     * @return \OpenNexus\Bundle\PlatformBundle\Util\XTable
+     * @return XTable
      */
     public function addAndSwitchToSheet($title = null, array $options = [])
     {
@@ -1105,7 +1108,7 @@ class XTable
      *
      * @param integer $sheetNumber
      *
-     * @return \OpenNexus\Bundle\PlatformBundle\Util\XTable
+     * @return XTable
      */
     public function switchToSheet($sheetNumber)
     {
@@ -1124,7 +1127,7 @@ class XTable
      *
      * @param array $options
      *
-     * @return \OpenNexus\Bundle\PlatformBundle\Util\XTable
+     * @return XTable
      */
     public function setGlobalCellOptions(array $options = array())
     {
