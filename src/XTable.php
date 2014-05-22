@@ -9,49 +9,48 @@ use \PHPExcel_Writer_Excel5;
 
 
 /**
- * Wrapper do pluginu sfPhpExcel, służącego do generowania plików Excel (BIFF/Open XML)
+ * Wrapper for the PHPExcel library, used to generate Excel files (BIFF/Open XML formats)
  *
- * Na chwilę obecną obsługiwane jest minimum opcji
+ * For now only the most basic options are available
  *
  * @author Łukasz Czejgis
  */
 class XTable
 {
-    private $sheet;     // Arkusz
-    private $excel;     // Skoroszyt
-    //private $row;       // Numer wiersza (1..)
-    //private $coll;      // Numer (tak, numer) kolumny (0..)
-    //private $maxColl;
-    //private $debug;     // Wyświetlać dodatkowe informacje?
-    //private $bgcolor;   // Kolor tła wiersza
+    private $sheet;     // Sheet
+    private $excel;     // Worksheet
+    private $row;       // Row number (1..)
+    private $coll;      // Column number (yes, number) (0..)
+    private $maxColl;
+    private $debug;     // Display additional information?
     private $rangeStart;
     private $rangeEnd;
     private $defaultFontSize;
-    private $sheetNo;   // numer bieżącego arkusza w skoroszycie
+    private $sheetNo;   // numer of the current sheet in the worksheet
     private $globalCellOptions;
     private $currentRowOptions;
 
     /**
-     * Parametry:
-     *   > start_row (opcjonalny) - numer wiersza, od którego zaczynamy wypełniać komórki (domyślnie: 1)
-     *   > start_coll (opcjonalny) - numer kolumny, od której zaczynamy wypełniać komórki (domyślnie: 0; 0 = A, 1 = B, 2 = C, itd.)
-     *   > creator (opcjonalny) - autor skoroszyt
-     *   > modified_by (opcjonalny) - kto ostatnio modyfikował skoroszyt
-     *   > title (opcjonalny) - tytuł skoroszytu
-     *   > subject (opcjonalny) - temat skoroszytu
-     *   > description (opcjonalny) - opis skoroszytu (domyślnie: data/godzina wygenerowania dokumentu)
-     *   > keywords (opcjonalny) - słowa kluczowe skoroszytu
-     *   > category (opcjonalny) - kategoria skoroszytu
-     *   > sheet_title (opcjonalny) - nazwa arkusza (arkusza, nie skoroszytu!)
+     * Available parameters (all are optional):
+     *   > start_row - row number from which we start to fill cells (default value: 1)
+     *   > start_coll - column number from which we start to fill cells (default value: 0; 0 = A, 1 = B, 2 = C, etc.)
+     *   > creator - worksheet author
+     *   > modified_by - name of person who last modified the worksheet
+     *   > title - worksheet title
+     *   > subject - worksheet subject
+     *   > description - worksheet description (default value: date and time when the document was created)
+     *   > keywords - worksheet keywords
+     *   > category - worksheet category
+     *   > sheet_title - sheet name (sheet, not worksheet!)
      *
-     * @param array $params Parametry
+     * @param array $params Parameters
      */
     public function __construct($params = array())
     {
         $this->row  = ( isset($params['start_row'])  ? $params['start_row']  : 1 );
         $this->coll = ( isset($params['start_coll']) ? $params['start_coll'] : 0 );
         $this->maxColl = $this->coll;
-        $this->debug = false;               // Domyślnie chcemy być cicho (inaczej serwer nie wyśle wygenerowanego pliku)
+        $this->debug = false;               // By default we want to be quiet be (otherwise the generated file can not be sent)
         $this->excel = new PHPExcel();
         $this->globalCellOptions = [];
         $this->currentRowOptions = [];
@@ -74,8 +73,7 @@ class XTable
 
         if ( isset($params['description']) ) {
             $this->excel->getProperties()->setDescription(trim($params['description']));
-        }
-        else {
+        } else {
             $this->excel->getProperties()->setDescription('Data/godzina wygenerowania: %data_godzina_wygenerowania%');
         }
 
@@ -101,7 +99,7 @@ class XTable
     }
 
     /**
-     * Włącza wyświetlanie dodatkowych informacji
+     * Turns on displaying additional information
      */
     public function debugOn()
     {
@@ -109,7 +107,7 @@ class XTable
     }
 
     /**
-     * Wyłącza wyświetlanie dodatkowych informacji
+     * Turns off displaying additional information
      */
     public function debugOff()
     {
@@ -117,11 +115,13 @@ class XTable
     }
 
     /**
-     * Wpisuje podaną wartość w bieżącą komórkę (i przesuwa wew. wskaźnik na komórkę po prawej stronie)
+     * Inserts given value into the current cell and moves the internal pointer into the next cell on the right
      *
-     * @param string $value Wartość komórki
-     * @param integer $colspan Ile komórek (razem z tą) idąc w prawo chcemy scalić (1 = brak scalenia)
-     * @param array $options Opcjonalne parametry (@see applyCellOptions())
+     * @param string $value Value
+     * @param integer $colspan How many cells (including the current one) you wish to span (default value: 1 = no spanning)
+     * @param array $options Optional parameters (@see applyCellOptions())
+     *
+     * @return XTable
      */
     public function addValue($value, $colspan = 1, $options = array())
     {
@@ -129,31 +129,29 @@ class XTable
             $value = $value->__toString();
         }
 
-        // Większość funkcji phpExcel operuje na współrzędnych Excelowych (np. A3, B7, AC10, itp.)
-        // Ponieważ ja, wewnętrznie, operuję numerami (kolumn i wierszy), muszę na potrzeby chwili dokonać konwersji
+        // Most of PHPExcel's methods operate on Excel coordinates (for example: A3, B7, AC10, etc.)
+        // Because I operate on cell and rows numbers I have to convert given numbers into coordinates
         $cellCoords = $this->toCoords();
 
-        if ( $this->debug ) {
-            echo 'Do komórki o wspolrzednych (r:'. $this->row .', c:'. $this->coll .'), aka. '. $cellCoords .' wpisuje wartosc "'. $value .'"<br>';
-        }
+        $this->displayDebugMessage('Do komórki o wspolrzednych (r:'. $this->row .', c:'. $this->coll .'), aka. '. $cellCoords .' wpisuje wartosc "'. $value .'"<br>');
 
         $result = $this->sheet->setCellValueByColumnAndRow($this->coll, $this->row, $value);
 
-        // Jeżeli w komórce użyty zostanie znak nowego wierwsza (ALT+Enter) Excel automatycznie włącza zawijanie wierszy
-        // Dlatego też ja robię dokładnie to samo
+        // If there is a newline char in the cell value (ALT+Enter) Excel automatically enables word wrap
+        // That's why I do the exact same thing :)
         if ( strpos($value, "\n") !== false ) {
             $this->sheet->getStyle($cellCoords)->getAlignment()->setWrapText(true);
         }
 
-        // Ewentualna parametryzaja komórki
+        // Optional cell parametrization
         $this->applyCellOptions($cellCoords, $options);
 
-        // Jeżeli mam dokonać scalenia komórek...
+        // If I should merge cells...
         if ( $colspan > 1 ) {
             $this->sheet->mergeCells($cellCoords .':'. $this->toCoords(null, $this->coll+$colspan-1));
         }
 
-        // Przesunięcie wew. wskaźnika
+        // Increase the internal pointer
         $this->coll += $colspan;
 
         $this->bumpMaxColl();
@@ -162,9 +160,13 @@ class XTable
     }
 
     /**
-     * Przesuwa wewnętrzny wskaźnik o wskazaną ilość kolumn w prawo (domyślnie: 1)
+     * Skips given number of cells (moves the internal pointer by given amount)
      *
-     * @param int $num O ile kolumn przesunąć wskaźnik
+     * Default value: 1
+     *
+     * @param int $num How many columns should I skip (how far should I move the pointer)
+     *
+     * @return XTable
      */
     public function skip($num = 1)
     {
@@ -180,8 +182,9 @@ class XTable
     }
 
     /**
-     * Przesuwa wew. wskaźnik do nowego wiersza, na pierwszą kolumnę (odpowiednik \n\r)
-     * oraz czyści (resetuje) formatowanie wiersza
+     * Moves the internal pointer into the first column of the next row (equivalent of \n\r, ie. new line + carriage return) and resets the row formatting options
+     *
+     * return XTable
      */
     public function nextRow()
     {
@@ -193,44 +196,47 @@ class XTable
     }
 
     /**
-     * Ustawia opcje formatowania bieżącego wiersza
+     * Sets the current row formatting options
      *
-     * Użycie tej opcji powoduje wyczyszczenie dotychczas ustawionego formatowania wierwsza (jeżeli było ustawione)
+     * Using this will forget the currently set row formatting (if there was any)
      *
-     * Obsługiwane parametry:
-     *   > bgcolor - kolor tła, w formacie: RRGGBB (bez # z przodu!)
-     *   > height - wysokość wiersza
-     *   > bold - pogrubić tekst (true) czy nie (false; domyślnie)?
+     * Available options:
+     *   >
+     *   > bgcolor - background color; format: RRGGBB (without # in front!)
+     *   > height - row height
+     *   > bold - should the text be bold by default (true) or not (false; default)?
      *
-     * @param array $options Opcje
+     * @param array $options Options
+     *
+     * @return XTable
      */
     public function setRowOptions(array $options = [])
     {
         $this->clearRowOptions();
 
-        // Opcje 'bgcolor' i 'bold' są stosowane do komórek wiersza
+        // The 'bgcolor' and 'bold' options are applied to row cells
         $this->currentRowOptions = $options;
 
-        // Opcja 'height' jest stosowana do wiersza
+        // The 'height' option is applied to the row
         $this->applyRowOptions($options);
 
         return $this;
     }
 
     /**
-     * Tłumaczy podany numer kolumny na jej Excelową nazwę (współrzędną)
+     * Converts given column number into its Excel coordinate (A, B, C, etc.)
      *
-     * Jeżeli nie zostanie podany numer kolumny, użyta zostanie wartość wew. wskaźnika
+     * If no column number is given, the internal pointer's column will be used
      *
-     * Ograniczenie: obsługiwane są kolumny od A do ZZ (~700 kolumn)
+     * Constraint: only A-ZZ column range is currently supported (~700 columns)
      *
-     * @param integer $coll Numer kolumny (opcjonalnie)
+     * @param integer $coll Column number (optional)
      *
-     * @return string Nazwa (współrzędna) kolumny
+     * @return string Column coordinate
      */
     public function columnNumberToColumnName($coll = null)
     {
-        // @todo pomyśleć czy nie użyć tutaj convertNumberToColumnName() z ExcelUtils :)
+        // @TODO try using ExcelUtils::convertNumberToColumnName()?
 
         if ( is_null($coll) ) {
             $coll = $this->coll;
@@ -250,16 +256,16 @@ class XTable
     }
 
     /**
-     * Tłumaczy podany numer kolumny i wiersza na Excelową nazwę (współrzędne) komórki
+     * Converts given column and row numbers into its Excel coordinates (A1, B2, C5, etc.)
      *
-     * Jeżeli nie zostanie podany numer kolumny, użyta zostanie wartość wew. wskaźnika
+     * If no column number is given, the internal pointer's column will be used
      *
-     * Jeżeli nie zostanie podany numer wiersza, użyta zostanie wartość wew. wskaźnika
+     * If no row number is given, the internal pointer's row will be used
      *
-     * @param integer $row Numer wiersza (opcjonalnie)
-     * @param integer $coll Numer wiersza (opcjonalnie)
+     * @param integer $row Row number (optional)
+     * @param integer $coll Column number (optional)
      *
-     * @return string Nazwa (współrzędne) komórki
+     * @return string Cell coordinates
      */
     public function toCoords($row = null, $coll = null)
     {
@@ -271,9 +277,9 @@ class XTable
     }
 
     /**
-     * Tłumaczy podaną Excelową nazwę (współrzędne) komórki na numer wiersza i kolumny
+     * Converts given Excel cell coordinates into cell and row numbers
      *
-     * @return array Numer wiersza (row) i kolumny (coll)
+     * @return array Row number (row) and column number (coll)
      */
     public function toColumnAndRow($value)
     {
@@ -284,9 +290,9 @@ class XTable
     }
 
     /**
-     * Zwraca bieżące wskazanie wierwsza wew. wskaźnika
+     * Get the row number where the internal pointer is currently at
      *
-     * @return integer Numer bieżącego wiersza (1..)
+     * @return integer Current row number (1..)
      */
     public function getRow()
     {
@@ -294,9 +300,9 @@ class XTable
     }
 
     /**
-     * Zwraca bieżące wskazanie kolumny wew. wskaźnika
+     * Get the column number where the internal pointer is currently at
      *
-     * @return integer Numer bieżącej kolumny (0..)
+     * @return integer Current column number (0..)
      */
     public function getColl()
     {
@@ -304,9 +310,9 @@ class XTable
     }
 
     /**
-     * Zwraca aktywny arkusz
+     * Returns the current sheet
      *
-     * @return PHPExcel_Worksheet Arkusz
+     * @return PHPExcel_Worksheet Sheet
      */
     public function getSheet()
     {
@@ -314,9 +320,9 @@ class XTable
     }
 
     /**
-     * Zwraca skoroszyt
+     * Returns the worksheet
      *
-     * @return PHPExcel Skoroszyt
+     * @return PHPExcel Worksheet
      */
     public function getExcel()
     {
@@ -324,35 +330,35 @@ class XTable
     }
 
     /**
-     * Parametryzuje daną komórkę
+     * Applies options to the given cell
      *
-     * Ustawione tutaj opcje nadpisują opcje ustawione dla wiersza danej komórki
+     * Options set here override the options set for the cell's row
      *
-     * Obsługiwane parametry:
-     *   > bgcolor - kolor tła, w formacie: RRGGBB (bez # z przodu!)
-     *   > font-size - rozmiar tekstu
-     *   > bold - pogrubić tekst (true) czy nie (false; domyślnie)?
-     *   > italic - kursywa (true) czy nie (false; domyślnie)
-     *   > underline - podkreślenie (true) czy nie (false; domyślnie)
-     *   > strikethrough - przekreślenie (true) czy nie (false; domyślnie)
-     *   > subscript - indeks dolny (true) czy nie (false; domyślnie)
-     *   > superscript - indeks górny (true) czy nie (false; domyślnie)
-     *   > wrap - czy włączyć zawijanie tekstu w tej komórce (true) czy nie (false; domyślnie)
-     *   > text-align - poziome (horyzontalne) wyrównanie:
-     *     - center (do środka)
-     *     - left (do lewej)
-     *     - right (do prawej)
-     *     - justify (wyjustowanie)
+     * Available parameters:
+     *   > bgcolor - background color; format: RRGGBB (without # in front!)
+     *   > font-size - text size
+     *   > bold - true if the text should be bold (default: false)
+     *   > italic - true if the text should be italic (default: false)
+     *   > underline - true if the text should be underlined (default: false)
+     *   > strikethrough - true if the text should be struck through (default: false)
+     *   > subscript - (default: false)
+     *   > superscript - (default: false)
+     *   > wrap - true if the text wrapping should be enabled (default: false)
+     *   > text-align - horizontal cell contents align:
+     *     - center
+     *     - left
+     *     - right
+     *     - justify
      *     - general
      *     - centerContinous
-     *   > vertical-align - pionowe (wertykalne) wyrównanie:
-     *     - bottom (do dołu)
-     *     - center (do środka)
-     *     - justify (wyjustowanie)
-     *     - top (do góry)
-     *   > borders (array) - obramowanie:
+     *   > vertical-align - vertical cell contents align:
+     *     - bottom
+     *     - center
+     *     - justify
+     *     - top
+     *   > borders (array):
      *      > top, bottom, left, right (array):
-     *          > border-style - styl obramowania:
+     *          > border-style - given border style:
      *              - dashDot
      *              - dashDotDot
      *              - dashed
@@ -366,21 +372,21 @@ class XTable
      *              - none
      *              - slantDashDot
      *              - thick
-     *              - thin (domyślnie)
-     *          > border-color - kolor obramowania, w formacie: RRGGBB (bez # z przodu!)
-     *                           domyślnie: 000000 (czerń)\
-     *   > comment (array) - komentarz:
-     *      > lines (array) - linie tekstu będącego treścią komentarza:
-     *          > text (string) - linijka tekstu
-     *          > options (array) - opcje dot. tej linijki tekstu (opcjonalnie):
-     *              > bold (boolean) - pogrubienie
-     *      > options (array) - opcje dot. całego komentarza (opcjonalnie):
-     *          > height (float) - wysokość pola komentarza (domyślnie 55.5 punktu)
-     *          > width (float) - szerokość pola komentarza (domyślnie: 96 punktów)
-     *   > hyperlink (boolean) - traktować zawartość komórki jako adres WWW lub e-mail (ostrożnie!)
+     *              - thin (default value)
+     *          > border-color - given border color; format: RRGGBB (without # in front!)
+     *                           default value: 000000 (black)
+     *   > comment (array):
+     *      > lines (array) - lines of comment text and its parameters:
+     *          > text (string) - line of text
+     *          > options (array) - given text line parameters (optional):
+     *              > bold (boolean)
+     *      > options (array) - entire comment parameters (optional):
+     *          > height (float) - comment field height (default: 55.5 points)
+     *          > width (float) - comment field width (default: 96 punktów)
+     *   > hyperlink (boolean) - convert cell value into a hyperlink (causion!)
      *
-     * @param integer $cell_coords Nazwa (współrzędne) Excelowe komórki
-     * @param array $options Parametry
+     * @param string $cell_coords Cell coordinates
+     * @param array $options Parameters
      */
     private function applyCellOptions($cell_coords, $options)
     {
@@ -527,7 +533,7 @@ class XTable
     }
 
     /**
-     * Czyści ustawione formatowanie wiersza
+     * Resets (forgets) the current row formatting options
      *
      * @see applyRowOptions()
      */
@@ -537,7 +543,7 @@ class XTable
     }
 
     /**
-     * Parametryzuje bieżący wiersz
+     * Applies options to current row
      *
      * @param array $options Parametry
      */
@@ -549,7 +555,9 @@ class XTable
     }
 
     /**
-     * Ustawia "na oko" szerokości wszystkich kolumn jakie obecnie istnieją w arkuszu
+     * Automatically sets width on all cells in use in the current sheet based on their contents (it's not very precise)
+     *
+     * @return XTable
      */
     public function autoSizeAllColumns()
     {
@@ -565,14 +573,12 @@ class XTable
     }
 
     /**
-     * Ustawia "na oko" wysokość bieżącego wiersza
+     * Automatically sets the height on the current row based on its contents
      *
-     * Wysokość obliczana jest wg formuły:
-     *   dana liczba pikseli * MAX(ilość wierszy tekstu we wszystkich komórkach wiersza)
+     * Height is calculated based on the following formula:
+     *   given number of pixels * MAX(numer of lines of text in all the row's cells)
      *
-     * Działanie to wykonywane jest na pojedynczym wierszu, według wartości wew. wskaźnika (numer wiersza)
-     *
-     * @param integer $row_height Ile pikseli wysokości dostaje każdy wiersz tekstu (patrz: wyżej)?
+     * @param integer $row_height How much height (in pixels) does every line of text get?
      */
     public function autoSizeRow($row_height = 12)
     {
@@ -590,9 +596,9 @@ class XTable
     }
 
     /**
-     * Zwraca ilość znaków nowego wiersza w podanym ciągu znaków
+     * Returns the number of newline chars in the given string
      *
-     * @param string $string Badany ciąg znaków
+     * @param string $string
      *
      * @return integer
      */
@@ -602,7 +608,7 @@ class XTable
     }
 
     /**
-     * Czyści zapamiętane dane zakresu (adres początku i adres końca)
+     * Resets (forgets) the remembered range start and ending coordinates
      */
     public function resetRange()
     {
@@ -613,12 +619,11 @@ class XTable
     }
 
     /**
-     * Otwiera (rozpoczyna) zakres
+     * Begins (opens) a range
      *
-     * Jeżeli nie zostaną podane współrzędne komórki, od której ma się rozpoczynać zakres,
-     * zostanie on otwarty na bieżącej komórce (wskazywanej przez wewnętrzny wskaźnik)
+     * If no coordinates for the range start point are given it will start at the current internal pointer location
      *
-     * @param string $coords Excelowa nazwa (współrzędne) komórki (opcjonalnie)
+     * @param string $coords Cell coordinates (optional)
      */
     public function startRange($coords = null)
     {
@@ -626,34 +631,31 @@ class XTable
     }
 
     /**
-     * Zamyka (kończy) zakres
+     * Ends (finishes) a range
      *
-     * Jeżeli nie zostaną podane współrzędne komórki, na której ma się kończyć zakres,
-     * zostanie on zamknięty na bieżącej komórce (wskazywanej przez wewnętrzny wskaźnik)
+     * If no coordinates for the range ending point are given it will end at the current internal pointer location
      *
-     * Jeżeli zakres nie został otwarty, użycie tej metody zostanie zinterpretowane
-     * jako otwarcie zakresu, a nie zamknięcie
+     * If the range wasn't opened before, calling this method will be interpreted as call to open a range, not close it
      *
-     *
-     * @param string $coords Excelowa nazwa (współrzędne) komórki (opcjonalnie)
+     * @param string $coords Cell coordinates (optional)
      */
     public function endRange($coords = null)
     {
-        // Jeżeli znam początek zakresu...
+        // If I know the range starting point...
         if ( $this->rangeOpened() ) {
             $this->rangeEnd = ( is_null($coords) ? $this->toCoords(null, $this->coll-1) : $coords );
         }
-        // Jeżeli zakres nie został otwarty, otwórz go zamiast zamykać
+        // If the range wasn't opened, open it now
         else {
             $this->startRange($coords);
         }
     }
 
     /**
-     * Parametryzuje ustalony zakres komórek
+     * Applies options to the given cell
      *
-     * Obsługiwane parametry:
-     *   > border-style - styl obramowania:
+     * Available parameters:
+     *   > border-style (string):
      *     - dashDot
      *     - dashDotDot
      *     - dashed
@@ -667,46 +669,43 @@ class XTable
      *     - none
      *     - slantDashDot
      *     - thick
-     *     - thin (domyślnie)
+     *     - thin (default value)
      *
-     *   > border-color - kolor obramowania, w formacie: RRGGBB (bez # z przodu!)
-     *     domyślnie: 000000 (czerń)
+     *   > border-color - border color; format: RRGGBB (without # in front!)
+     *     default value: 000000 (black)
      *
-     *   > bordering-type - rodzaj obramowania (lub, które krawędzi ramkujemy :))
-     *     - allborders (wszystkie krawędzie)
-     *     - outline (domyślnie) (tylko górna, dolna, lewa i prawa krawędź, bez wewnętrznych)
-     *     - inside (tylko wewnętrzne krawędzie)
-     *     - vertical (tylko pionowe krawędzie)
-     *     - horizontal (tylko poziome krawędzie)
+     *   > bordering-type (string) - bordering type (aka. which borders are we using :))
+     *     - allborders (all borders)
+     *     - outline (default) (only outer borders)
+     *     - inside (only interior borders)
+     *     - vertical (only vertical borders)
+     *     - horizontal (only horizontal borders)
      *
-     *   > font - czcionka
-     *     - bold (pogrubienie); boolean
-     *     - italic (kursywa); boolean
-     *     - size (rozmiar); integer
-     *     - underline (podkreślenie); boolean
-     *     - strikethrough (przekreślenie); boolean
-     *     - subscript (indeks dolny); boolean
-     *     - superscript (indeks górny); boolean
+     *   > font (array)
+     *     - bold (boolean)
+     *     - italic (boolean)
+     *     - size (integer)
+     *     - underline (boolean)
+     *     - strikethrough (boolean)
+     *     - subscript (boolean)
+     *     - superscript (boolean)
      *
-     * UWAGA: Użycie tej metody czyści zapamiętane wartości początku i końca zakresu (zapominamy o zakresie)
+     * WARNING: calling this method clears set range starting and ending points (if there were any set)
      *
-     * Jeżeli znamy tylko początek zakresu, za jego koniec przyjęta zostaje
-     * bieżąca, wskazywana przez wewnętrzny wskaźnik, komórka
+     * If we only know the starting point of range, the current cell will become its ending point
      *
-     * Jeżeli zakres nie jest znany, nic nie jest parametryzowane.
+     * If range is unknown, given options are not applied.
      *
-     * @param array $options Parametry
-     *
-     * @return void
+     * @param array $options Parameters
      */
     public function setRangeOptions($options = array())
     {
-        // Zamknij zakres na bieżącej komórce jeżeli nie został on dotychczas jawnie zamknięty
+        // Close the range on the current cell if it's still open
         if ( !$this->rangeClosed() ) {
             $this->endRange();
         }
 
-        // Ewakuacja jeżeli zakres nie jest zadeklarowany
+        // Bail if there is no range
         if ( !$this->rangeSet() ) {
             return;
         }
@@ -742,9 +741,9 @@ class XTable
     }
 
     /**
-     * Mówi czy znamy współrzędne początku zakresu
+     * Tells if we know the range starting point
      *
-     * @return boolean true jeżeli znamy, false - w przeciwnym wypadku
+     * @return boolean
      */
     private function rangeOpened()
     {
@@ -752,9 +751,9 @@ class XTable
     }
 
     /**
-     * Mówi czy znamy współrzędne końca zakresu
+     * Tells if we know the range ending point
      *
-     * @return true jeżeli znamy, false - w przeciwnym wypadku
+     * @return boolean
      */
     private function rangeClosed()
     {
@@ -762,9 +761,9 @@ class XTable
     }
 
     /**
-     * Mówi czy mamy zadeklarowany zakres (znamy współrzędne jego początku i końca)
+     * Tells if we do have a range set (we know its starting and ending points)
      *
-     * @return boolean true jeżeli mamy, false - w przeciwnym wypadku
+     * @return boolean
      */
     private function rangeSet()
     {
@@ -779,14 +778,16 @@ class XTable
     }
 
     /**
-     * Ustawia opcje formatowania bieżącej kolumny
+     * Applies options to the given column
      *
-     * Użycie tej opcji powoduje wyczyszczenie dotychczas ustawionego formatowania kolumny (jeżeli było ustawione)
+     * WARNING: calling this method will reset the currently set formatting for the given column
      *
-     * @see applyCollumOptions()
+     * see applyCollumOptions()
      *
-     * @param integer $column_no Numer kolumny (1..n)
-     * @param array $options Opcje
+     * @param integer $column_no Column number (1..n)
+     * @param array $options Parameters
+     *
+     * @return XTable
      */
     public function setColumnOptions($column_no, $options = array())
     {
@@ -797,28 +798,27 @@ class XTable
     }
 
     /**
-     * Czyści ustawione formatowanie kolumny
+     * Resets the currently set formatting for the given column
      *
      * @see applyColumnOptions()
      *
-     * @param integer $column_no Numer kolumny (1..n)
+     * @param integer $column_no Column number (1..n)
      */
     private function clearColumnOptions($column_no)
     {
-        if ( is_numeric($column_no) && $column_no > 0 )
-        {
+        if ( is_numeric($column_no) && $column_no > 0 ) {
             $this->sheet->getColumnDimension($this->columnNumberToColumnName($column_no-1))->setWidth(-1);
         }
     }
 
     /**
-     * Parametryzuje bieżącą kolumnę
+     * Set options to the given column
      *
-     * Obsługiwane parametry:
-     *   > width - szerokość kolumny
+     * Available parameters:
+     *   > width - column width
      *
-     * @param integer $column_no Numer kolumny (1..n)
-     * @param array $options Parametry
+     * @param integer $column_no Column number (1..n)
+     * @param array $options Parameters
      */
     private function applyColumnOptions($column_no, $options = array())
     {
@@ -901,8 +901,7 @@ class XTable
             }
         }
 
-        if ( array_key_exists('bordering-type', $options) )
-        {
+        if ( array_key_exists('bordering-type', $options) ) {
             switch ( $options['bordering-type'] ) {
                 case 'allborders':
                 case 'outline':
@@ -932,10 +931,10 @@ class XTable
     }
 
     /**
-     * Ustawia nagłówek arkusza
+     * Sets page header (applies to printing)
      *
-     * @param string $content Treść nagłówka
-     * @param boolean $odd true (domyślnie) jeśli ma to być nagłówek nieparzystych stron, false - w przeciwnym wypadku (uwaga: wszystkie strony otrzymają ten sam nagłówek jeżeli nie zostanie użyta metoda enableOddEvenHeaderAndFooter(true)!)
+     * @param string $content Header content
+     * @param boolean $odd true (default) if this header should be used only on odd pages, false otherwise (warning: all pages will get the exact same header if enableOddEvenHeaderAndFooter(true) is not called!)
      *
      * @return boolean
      */
@@ -956,10 +955,10 @@ class XTable
     }
 
     /**
-     * Ustawia stopkę arkusza
+     * Sets page footer (applies to printing)
      *
-     * @param string $content Treść nagłówka
-     * @param boolean $odd true (domyślnie) jeśli ma to być nagłówek nieparzystych stron, false - w przeciwnym wypadku (uwaga: wszystkie strony otrzymają ten sam nagłówek jeżeli nie zostanie użyta metoda enableOddEvenHeaderAndFooter(true)!)
+     * @param string $content Footer content
+     * @param boolean $odd true (default) if this header should be used only on odd pages, false otherwise (warning: all pages will get the exact same header if enableOddEvenHeaderAndFooter(true) is not called!)
      *
      * @return boolean
      */
@@ -980,9 +979,9 @@ class XTable
     }
 
     /**
-     * Zwraca nagłówek arkusza
+     * Returns the page header
      *
-     * @param boolean $odd true (domyślnie) jeśli ma to być nagłówek nieparzystych stron, false - w przeciwnym wypadku
+     * @param boolean $odd true (default) if you want the odd pages header, false - otherwise
      *
      * @return PHPExcel_Worksheet_HeaderFooter
      */
@@ -990,16 +989,15 @@ class XTable
     {
         if ( $odd ) {
             return $this->sheet->getHeaderFooter()->getOddHeader();
-        }
-        else {
+        } else {
             return $this->sheet->getHeaderFooter()->getEvenHeader();
         }
     }
 
     /**
-     * Zwraca stopkę arkusza
+     * Returns the page footer
      *
-     * @param boolean $odd true (domyślnie) jeśli ma to być stopka nieparzystych stron, false - w przeciwnym wypadku
+     * @param boolean $odd true (default) if you want the odd pages footer, false - otherwise
      *
      * @return PHPExcel_Worksheet_HeaderFooter
      */
@@ -1007,16 +1005,15 @@ class XTable
     {
         if ( $odd ) {
             return $this->sheet->getHeaderFooter()->getOddFooter();
-        }
-        else {
+        } else {
             return $this->sheet->getHeaderFooter()->getEvenFooter();
         }
     }
 
     /**
-     * Włącza rozróżnianie nagłówków i stopek stron parzystych i nieparzystych
+     * Turns on separation of headers and footers on odd and even pages
      *
-     * (domyślnie to rozróżnienie NIE JEST WŁĄCZONE)
+     * WARNING: by default this separation IS NOT ON!
      *
      * @param boolean $enable
      */
@@ -1026,7 +1023,7 @@ class XTable
     }
 
     /**
-     * Mówi czy jest obecnie włączone rozróżnianie nagłówków i stron patrzystych i nieparzystych
+     * Tells if the separation of headers and footers on odd and even pages is turned on
      *
      * @return boolean
      */
@@ -1036,11 +1033,11 @@ class XTable
     }
 
     /**
-     * Ustawia domyślną wielkość czcionki dla wszystkich komórek arkusza
+     * Sets the default font size for all the worksheet cells
      *
-     * (UWAGA: zmiana obowiązuje od momentu użycia tej opcji, tj. NIE działa retroaktywnie)
+     * WARNING: this applies only to content added AFTER this method is called!
      *
-     * @param integer $size Rozmiar czcionki
+     * @param integer $size Font size
      */
     public function setDefaultFontSize($size)
     {
@@ -1050,7 +1047,7 @@ class XTable
     }
 
     /**
-     * Zwraca obowiązującą obecnie domyślną wielkość czcionki (o ile została ustawiona)
+     * Returns the currently set default font size (if any was set)
      *
      * @return integer|null
      */
@@ -1060,9 +1057,9 @@ class XTable
     }
 
     /**
-     * Przełącza klasę na działanie na danym skoroszycie Excela
+     * Sets the worksheet this wrapper should work on instead of the one it created itself
      *
-     * @param \PHPExcel $excel Skoroszyt
+     * @param \PHPExcel $excel Worksheet
      *
      * @return XTable
      */
@@ -1074,13 +1071,13 @@ class XTable
     }
 
     /**
-     * Dodaje do skoroszytu nowy arkusz i przełącza na niego działanie klasy
+     * Adds a new sheet to the worksheet and switches to it
      *
-     * Obsługiwane opcje:
-     *  > show_lines (boolean) - pokazuj linie siatki?
+     * Available options:
+     *  > show_lines (boolean) - true if grid lines should be shown
      *
-     * @param string $title Tytuł/nazwa nowego arkusza
-     * @param array $options Opcje
+     * @param string $title Name/title of the new sheet
+     * @param array $options Options (optional)
      *
      * @return XTable
      */
@@ -1104,7 +1101,7 @@ class XTable
     }
 
     /**
-     * Przełącza działanie klasy na wskazany arkusz skoroszytu (0-...)
+     * Switches to the given sheet (0-...)
      *
      * @param integer $sheetNumber
      *
@@ -1120,12 +1117,13 @@ class XTable
     }
 
     /**
-     * Ustanawia opcje, które będą odtąd stosowane do każdej komórki arkusza.
-     * Każda z ustawionych tutaj opcji może zostać indywidualnie nadpisana przez 3-ci argument metody addValue()
+     * Sets options that will be applied to every cell of the worksheet from now on
+     *
+     * Each of the options applied here can be overridden by addValue() third argument
      *
      * @see AddValue()
      *
-     * @param array $options
+     * @param array $options Options
      *
      * @return XTable
      */
@@ -1141,5 +1139,12 @@ class XTable
         $this->currentRowOptions = $options;
 
         return $this;
+    }
+
+    private function displayDebugMessage($message)
+    {
+        if ( $this->debug ) {
+            echo $message . PHP_EOL;
+        }
     }
 }
