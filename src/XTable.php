@@ -52,8 +52,8 @@ class XTable
         $this->maxColl = $this->coll;
         $this->debug = false;               // By default we want to be quiet be (otherwise the generated file can not be sent)
         $this->excel = new PHPExcel();
-        $this->globalCellOptions = [];
-        $this->currentRowOptions = [];
+        $this->globalCellOptions = array();
+        $this->currentRowOptions = array();
 
         if ( isset($params['creator']) ) {
             $this->excel->getProperties()->setCreator(trim($params['creator']));
@@ -210,7 +210,7 @@ class XTable
      *
      * @return XTable
      */
-    public function setRowOptions(array $options = [])
+    public function setRowOptions(array $options = array())
     {
         $this->clearRowOptions();
 
@@ -539,7 +539,7 @@ class XTable
      */
     private function clearRowOptions()
     {
-        $this->currentRowOptions = [];
+        $this->currentRowOptions = array();
     }
 
     /**
@@ -1081,7 +1081,7 @@ class XTable
      *
      * @return XTable
      */
-    public function addAndSwitchToSheet($title = null, array $options = [])
+    public function addAndSwitchToSheet($title = null, array $options = array())
     {
         $this->excel->createSheet();
 
