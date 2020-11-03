@@ -1,63 +1,39 @@
-<?php
+<?php declare(strict_types=1);
 namespace Noctis;
 
-use PHPExcel;
-use PHPExcel_Comment;
-use PHPExcel_RichText_Run;
-use PHPExcel_Style_Border;
-use PHPExcel_Style_Fill;
-use PHPExcel_Worksheet;
-use PHPExcel_Worksheet_HeaderFooter;
+use PhpOffice\PhpSpreadsheet\Comment;
+use PhpOffice\PhpSpreadsheet\RichText\Run;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
 /**
- * Wrapper for the PHPExcel library, used to generate Excel files (BIFF/Open XML formats)
+ * Wrapper for the PHPSpreadsheet library, used to generate Excel files (BIFF/Open XML formats)
  *
- * For now only the most basic options are available
+ * For now only the most basic options are available.
  *
  * @author Łukasz Czejgis
  */
 final class XTable
 {
-    /** @var PHPExcel_Worksheet Sheet */
-    private $sheet;
-
-    /** @var PHPExcel Worksheet */
-    private $excel;
-
-    /** @var int Row number (1..) */
-    private $row;
-
-    /** @var int Column number (yes, number) (0..) */
-    private $coll;
-
-    /** @var int */
-    private $maxColl;
-
-    /** @var bool Display additional information? */
-    private $debug;
-
-    /** @var string|null */
-    private $rangeStart;
-
-    /** @var string|null */
-    private $rangeEnd;
-
-    /** @var int|null */
-    private $defaultFontSize;
-
-    /** @var int Numer of the current sheet in the worksheet */
-    private $sheetNo;
-
-    /** @var array */
-    private $globalCellOptions = [];
-
-    /** @var array */
-    private $currentRowOptions = [];
+    private Worksheet $sheet;
+    private Spreadsheet $excel;
+    private int $row;       // Row number (1..)
+    private int $coll;      // Column number (yes, number) (0..)
+    private int $maxColl;
+    private bool $debug;    // Display additional information?
+    private ?string $rangeStart;
+    private ?string $rangeEnd;
+    private ?int $defaultFontSize;
+    private int $sheetNo;   // Number of the current sheet in the worksheet
+    private array $globalCellOptions = [];
+    private array $currentRowOptions = [];
 
     /**
      * Available parameters (all are optional):
      *   > start_row - row number from which we start to fill cells (default value: 1)
-     *   > start_coll - column number from which we start to fill cells (default value: 0; 0 = A, 1 = B, 2 = C, etc.)
+     *   > start_coll - column number from which we start to fill cells (default value: 1; 1 = A, 2 = B, 3 = C, etc.)
      *   > creator - worksheet author
      *   > modified_by - name of person who last modified the worksheet
      *   > title - worksheet title
@@ -70,10 +46,12 @@ final class XTable
     public function __construct(array $params = [])
     {
         $this->row  = $params['start_row'] ?? 1;
-        $this->coll = $params['start_coll'] ?? 0;
+        $this->coll = $params['start_coll'] ?? 1;
         $this->maxColl = $this->coll;
         $this->debug = false;               // By default we want to be quiet be (otherwise the generated file can not be sent)
-        $this->excel = new PHPExcel();
+        $this->rangeStart = $this->rangeEnd = null;
+        $this->defaultFontSize = null;
+        $this->excel = new Spreadsheet();
 
         if (isset($params['creator'])) {
             $this->excel
@@ -145,7 +123,7 @@ final class XTable
             }
 
             $this->sheet
-                ->setTitle($sheetTitle);
+                ->setTitle($sheetTitle, true);
         }
     }
 
@@ -168,8 +146,10 @@ final class XTable
     /**
      * Inserts given value into the current cell and moves the internal pointer into the next cell on the right
      *
-     * @param int    $colspan How many cells (including the current one) you wish to span (default value: 1 = no spanning)
-     * @param array  $options Optional parameters (@see applyCellOptions())
+     * @param int $colspan How many cells (including the current one) you wish to span (default value: 1 = no spanning)
+     * @param array $options Optional parameters (@see applyCellOptions())
+     *
+     * @throws \PhpOffice\PhpSpreadsheet\Exception
      */
     public function addValue(string $value, int $colspan = 1, array $options = []): self
     {
@@ -182,11 +162,17 @@ final class XTable
         $cellCoords = $this->toCoords();
 
         $this->displayDebugMessage(
-            'Do komórki o wspolrzednych (r:'. $this->row .', c:'. $this->coll .'), aka. '. $cellCoords .' wpisuje wartosc "'. $value .'"<br>'
+            sprintf(
+                'Inserting "%s" into cell with coordinates (r:%s, c:%s) aka. %s<br>',
+                $value,
+                (string)$this->row,
+                (string)$this->coll,
+                $cellCoords
+            )
         );
 
-        $this->sheet
-            ->setCellValueByColumnAndRow($this->coll, $this->row, $value);
+        $this->sheet->getCellByColumnAndRow($this->coll, $this->row, true)
+            ->setValue($value);
 
         // If there is a newline char in the cell value (ALT+Enter) Excel automatically enables word wrap
         // That's why I do the exact same thing :)
@@ -244,7 +230,7 @@ final class XTable
     public function nextRow(): self
     {
         $this->row++;
-        $this->coll = 0;
+        $this->coll = 1;
         $this->clearRowOptions();
 
         return $this;
@@ -294,7 +280,7 @@ final class XTable
         }
 
         $firstDigit = floor($coll / 26);
-        $secondDigit = $coll - ($firstDigit * 26);
+        $secondDigit = (int)($coll - ($firstDigit * 26));
 
         $collName = '';
         if ($firstDigit > 0) {
@@ -335,8 +321,8 @@ final class XTable
     public function toColumnAndRow(string $value): array
     {
         return [
-            'coll' => (ord($value{0}) - 65),
-            'row'  => $value{1}
+            'coll' => (ord($value[0]) - 65),
+            'row'  => $value[1]
         ];
     }
 
@@ -357,17 +343,14 @@ final class XTable
     }
 
     /**
-     * Returns the current sheet
+     * @return Worksheet The current worksheet
      */
-    public function getSheet(): PHPExcel_Worksheet
+    public function getSheet(): Worksheet
     {
         return $this->sheet;
     }
 
-    /**
-     * Returns the worksheet
-     */
-    public function getExcel(): PHPExcel
+    public function getExcel(): Spreadsheet
     {
         return $this->excel;
     }
@@ -381,7 +364,7 @@ final class XTable
         for ($c = 0; $c < $this->maxColl; $c++) {
             $collDim = $this->sheet
                 ->getColumnDimension(
-                    $this->columnNumberToColumnName($c)
+                    $this->columnNumberToColumnName($c), true
                 );
 
             if ($collDim->getWidth() == -1) {
@@ -403,9 +386,9 @@ final class XTable
     public function autoSizeRow(int $rowHeight = 12): void
     {
         $rowCellsLinesCount = [];
-        for ($c = 0; $c < $this->coll; $c++) {
+        for ($c = 1; $c < $this->coll; $c++) {
             $cellValue = $this->sheet
-                ->getCellByColumnAndRow($c, $this->row)
+                ->getCellByColumnAndRow($c, $this->row, true)
                 ->getValue();
             $rowCellsLinesCount[] = $this->countNewlines($cellValue);
         }
@@ -414,7 +397,7 @@ final class XTable
 
         if ($maxLinesInRow > 1) {
             $this->sheet
-                ->getRowDimension($this->row)
+                ->getRowDimension($this->row, true)
                 ->setRowHeight($rowHeight * $maxLinesInRow);
         }
     }
@@ -571,7 +554,8 @@ final class XTable
     /**
      * Sets page header (applies to printing)
      *
-     * @param bool $odd true (default) if this header should be used only on odd pages, false otherwise (warning: all pages will get the exact same header if enableOddEvenHeaderAndFooter(true) is not called!)
+     * @param bool $odd true (default) if this header should be used only on odd pages, false otherwise
+     * (warning: all pages will get the exact same header if enableOddEvenHeaderAndFooter(true) is not called!)
      */
     public function setSheetHeader(string $content, bool $odd = true): bool
     {
@@ -596,7 +580,8 @@ final class XTable
     /**
      * Sets page footer (applies to printing)
      *
-     * @param bool $odd true (default) if this header should be used only on odd pages, false otherwise (warning: all pages will get the exact same header if enableOddEvenHeaderAndFooter(true) is not called!)
+     * @param bool $odd true (default) if this header should be used only on odd pages, false otherwise
+     * (warning: all pages will get the exact same header if enableOddEvenHeaderAndFooter(true) is not called!)
      */
     public function setSheetFooter(string $content, bool $odd = true): bool
     {
@@ -623,7 +608,7 @@ final class XTable
      *
      * @param bool $odd true (default) if you want the odd pages header, false - otherwise
      */
-    public function getSheetHeader(bool $odd = true): PHPExcel_Worksheet_HeaderFooter
+    public function getSheetHeader(bool $odd = true): string
     {
         if ($odd) {
             return $this->sheet
@@ -641,7 +626,7 @@ final class XTable
      *
      * @param bool $odd true (default) if you want the odd pages footer, false - otherwise
      */
-    public function getSheetFooter(bool $odd = true): PHPExcel_Worksheet_HeaderFooter
+    public function getSheetFooter(bool $odd = true): string
     {
         if ($odd) {
             return $this->sheet
@@ -699,7 +684,7 @@ final class XTable
     /**
      * Sets the worksheet this wrapper should work on instead of the one it created itself
      */
-    public function loadExistingExcel(PHPExcel $excel): self
+    public function loadExistingExcel(Spreadsheet $excel): self
     {
         $this->excel = $excel;
 
@@ -717,7 +702,7 @@ final class XTable
     public function addAndSwitchToSheet(string $title = null, array $options = []): self
     {
         $this->excel
-            ->createSheet();
+            ->createSheet(null);
 
         $this->switchToSheet(++$this->sheetNo);
 
@@ -826,8 +811,8 @@ final class XTable
      *              > bold (boolean)
      *      > options (array) - entire comment parameters (optional):
      *          > height (float) - comment field height (default: 55.5 points)
-     *          > width (float) - comment field width (default: 96 punktów)
-     *   > hyperlink (boolean) - convert cell value into a hyperlink (causion!)
+     *          > width (float) - comment field width (default: 96 points)
+     *   > hyperlink (boolean) - convert cell value into a hyperlink (caution!)
      */
     private function applyCellOptions(string $cellCoords, array $options): void
     {
@@ -841,7 +826,7 @@ final class XTable
 
         if (isset($allOptions['bgcolor']) && !is_null($allOptions['bgcolor'])) {
             $style->getFill()
-                ->setFillType(PHPExcel_Style_Fill::FILL_SOLID);
+                ->setFillType(Fill::FILL_SOLID);
             $style->getFill()
                 ->getStartColor()
                 ->setARGB('FF'. $allOptions['bgcolor']);
@@ -963,7 +948,7 @@ final class XTable
 
         if (isset($allOptions['hyperlink']) && true === (bool)$allOptions['hyperlink']) {
             $value = $this->sheet
-                ->getCell($cellCoords)
+                ->getCell($cellCoords, true)
                 ->getValue();
 
             $isEmail = filter_var($value, FILTER_VALIDATE_EMAIL);
@@ -971,19 +956,19 @@ final class XTable
 
             if ($isEmail) {
                 $this->sheet
-                    ->getCell($cellCoords)
-                    ->getHyperlink()
+                    ->getCell($cellCoords, true)
+                    ->getHyperlink('A1')
                     ->setUrl('mailto:'. $value);
             } elseif ($isUrl) {
                 $this->sheet
-                    ->getCell($cellCoords)
-                    ->getHyperlink()
+                    ->getCell($cellCoords, true)
+                    ->getHyperlink('A1')
                     ->setUrl($value);
             }
         }
     }
 
-    private function applyCellCommentOptions(PHPExcel_Comment $comment, array $options): void
+    private function applyCellCommentOptions(Comment $comment, array $options): void
     {
         $setHeight = (array_key_exists('height', $options)
             && is_numeric($options['height'])
@@ -1002,7 +987,7 @@ final class XTable
         }
     }
 
-    private function applyCellCommentTextOptions(PHPExcel_RichText_Run $commentText, array $options): void
+    private function applyCellCommentTextOptions(Run $commentText, array $options): void
     {
         $makeBold = (array_key_exists('bold', $options) && true === $options['bold']);
 
@@ -1025,13 +1010,13 @@ final class XTable
     /**
      * Applies options to current row
      *
-     * @param array $options Parametry
+     * @param array $options
      */
-    private function applyRowOptions($options = []): void
+    private function applyRowOptions(array $options = []): void
     {
         if (isset($options['height']) && is_numeric($options['height'])) {
             $this->sheet
-                ->getRowDimension($this->row)
+                ->getRowDimension($this->row, true)
                 ->setRowHeight($options['height']);
         }
     }
@@ -1087,7 +1072,7 @@ final class XTable
         if ($columnNo > 0) {
             $this->sheet
                 ->getColumnDimension(
-                    $this->columnNumberToColumnName($columnNo-1)
+                    $this->columnNumberToColumnName($columnNo-1), true
                 )
                 ->setWidth(-1);
         }
@@ -1108,7 +1093,7 @@ final class XTable
             ) {
                 $this->sheet
                     ->getColumnDimension(
-                        $this->columnNumberToColumnName($columnNo-1)
+                        $this->columnNumberToColumnName($columnNo-1), true
                     )
                     ->setWidth($options['width']);
             }
@@ -1118,7 +1103,7 @@ final class XTable
     private function extractBordersOptions(array $options): array
     {
         $out = [
-            'style'          => PHPExcel_Style_Border::BORDER_THIN,
+            'style'          => Border::BORDER_THIN,
             'color'          => ['argb' => 'FF000000'],
             'bordering-type' => 'outline',
         ];
@@ -1126,63 +1111,63 @@ final class XTable
         if (array_key_exists('border-style', $options)) {
             switch ($options['border-style']) {
                 case 'dashDot':
-                    $out['style'] = PHPExcel_Style_Border::BORDER_DASHDOT;
+                    $out['style'] = Border::BORDER_DASHDOT;
                     break;
 
                 case 'dashDotDot':
-                    $out['style'] = PHPExcel_Style_Border::BORDER_DASHDOTDOT;
+                    $out['style'] = Border::BORDER_DASHDOTDOT;
                     break;
 
                 case 'dashed':
-                    $out['style'] = PHPExcel_Style_Border::BORDER_DASHED;
+                    $out['style'] = Border::BORDER_DASHED;
                     break;
 
                 case 'dotted':
-                    $out['style'] = PHPExcel_Style_Border::BORDER_DOTTED;
+                    $out['style'] = Border::BORDER_DOTTED;
                     break;
 
                 case 'double':
-                    $out['style'] = PHPExcel_Style_Border::BORDER_DOUBLE;
+                    $out['style'] = Border::BORDER_DOUBLE;
                     break;
 
                 case 'hair':
-                    $out['style'] = PHPExcel_Style_Border::BORDER_HAIR;
+                    $out['style'] = Border::BORDER_HAIR;
                     break;
 
                 case 'medium':
-                    $out['style'] = PHPExcel_Style_Border::BORDER_MEDIUM;
+                    $out['style'] = Border::BORDER_MEDIUM;
                     break;
 
                 case 'mediumDashDot':
-                    $out['style'] = PHPExcel_Style_Border::BORDER_MEDIUMDASHDOT;
+                    $out['style'] = Border::BORDER_MEDIUMDASHDOT;
                     break;
 
                 case 'mediumDashDotDot':
-                    $out['style'] = PHPExcel_Style_Border::BORDER_MEDIUMDASHDOTDOT;
+                    $out['style'] = Border::BORDER_MEDIUMDASHDOTDOT;
                     break;
 
                 case 'mediumDashed':
-                    $out['style'] = PHPExcel_Style_Border::BORDER_MEDIUMDASHED;
+                    $out['style'] = Border::BORDER_MEDIUMDASHED;
                     break;
 
                 case 'none':
-                    $out['style'] = PHPExcel_Style_Border::BORDER_NONE;
+                    $out['style'] = Border::BORDER_NONE;
                     break;
 
                 case 'slantDashDot':
-                    $out['style'] = PHPExcel_Style_Border::BORDER_SLANTDASHDOT;
+                    $out['style'] = Border::BORDER_SLANTDASHDOT;
                     break;
 
                 case 'thick':
-                    $out['style'] = PHPExcel_Style_Border::BORDER_THICK;
+                    $out['style'] = Border::BORDER_THICK;
                     break;
 
                 case 'thin':
-                    $out['style'] = PHPExcel_Style_Border::BORDER_THIN;
+                    $out['style'] = Border::BORDER_THIN;
                     break;
 
                 /*default:
-                    $out['style'] = PHPExcel_Style_Border::BORDER_THIN;
+                    $out['style'] = Border::BORDER_THIN;
                     break;*/
             }
         }
