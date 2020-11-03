@@ -1,12 +1,13 @@
 <?php
 namespace Noctis;
 
-use \PHPExcel;
-use \PHPExcel_Style_Border;
-use \PHPExcel_Style_Fill;
-use \PHPExcel_Writer_Excel2007;
-use \PHPExcel_Writer_Excel5;
-
+use PHPExcel;
+use PHPExcel_Comment;
+use PHPExcel_RichText_Run;
+use PHPExcel_Style_Border;
+use PHPExcel_Style_Fill;
+use PHPExcel_Worksheet;
+use PHPExcel_Worksheet_HeaderFooter;
 
 /**
  * Wrapper for the PHPExcel library, used to generate Excel files (BIFF/Open XML formats)
@@ -15,20 +16,43 @@ use \PHPExcel_Writer_Excel5;
  *
  * @author Łukasz Czejgis
  */
-class XTable
+final class XTable
 {
-    private $sheet;     // Sheet
-    private $excel;     // Worksheet
-    private $row;       // Row number (1..)
-    private $coll;      // Column number (yes, number) (0..)
+    /** @var PHPExcel_Worksheet Sheet */
+    private $sheet;
+
+    /** @var PHPExcel Worksheet */
+    private $excel;
+
+    /** @var int Row number (1..) */
+    private $row;
+
+    /** @var int Column number (yes, number) (0..) */
+    private $coll;
+
+    /** @var int */
     private $maxColl;
-    private $debug;     // Display additional information?
+
+    /** @var bool Display additional information? */
+    private $debug;
+
+    /** @var string|null */
     private $rangeStart;
+
+    /** @var string|null */
     private $rangeEnd;
+
+    /** @var int|null */
     private $defaultFontSize;
-    private $sheetNo;   // numer of the current sheet in the worksheet
-    private $globalCellOptions;
-    private $currentRowOptions;
+
+    /** @var int Numer of the current sheet in the worksheet */
+    private $sheetNo;
+
+    /** @var array */
+    private $globalCellOptions = [];
+
+    /** @var array */
+    private $currentRowOptions = [];
 
     /**
      * Available parameters (all are optional):
@@ -42,66 +66,93 @@ class XTable
      *   > keywords - worksheet keywords
      *   > category - worksheet category
      *   > sheet_title - sheet name (sheet, not worksheet!)
-     *
-     * @param array $params Parameters
      */
-    public function __construct($params = array())
+    public function __construct(array $params = [])
     {
-        $this->row  = ( isset($params['start_row'])  ? $params['start_row']  : 1 );
-        $this->coll = ( isset($params['start_coll']) ? $params['start_coll'] : 0 );
+        $this->row  = $params['start_row'] ?? 1;
+        $this->coll = $params['start_coll'] ?? 0;
         $this->maxColl = $this->coll;
         $this->debug = false;               // By default we want to be quiet be (otherwise the generated file can not be sent)
         $this->excel = new PHPExcel();
-        $this->globalCellOptions = array();
-        $this->currentRowOptions = array();
 
-        if ( isset($params['creator']) ) {
-            $this->excel->getProperties()->setCreator(trim($params['creator']));
+        if (isset($params['creator'])) {
+            $this->excel
+                ->getProperties()
+                ->setCreator(
+                    trim($params['creator'])
+                );
         }
 
-        if ( isset($params['modified_by']) ) {
-            $this->excel->getProperties()->setLastModifiedBy(trim($params['modified_by']));
+        if (isset($params['modified_by'])) {
+            $this->excel
+                ->getProperties()
+                ->setLastModifiedBy(
+                    trim($params['modified_by'])
+                );
         }
 
-        if ( isset($params['title']) ) {
-            $this->excel->getProperties()->setTitle(trim($params['title']));
+        if (isset($params['title'])) {
+            $this->excel
+                ->getProperties()
+                ->setTitle(
+                    trim($params['title'])
+                );
         }
 
-        if ( isset($params['subject']) ) {
-            $this->excel->getProperties()->setSubject(trim($params['subject']));
+        if (isset($params['subject'])) {
+            $this->excel
+                ->getProperties()
+                ->setSubject(
+                    trim($params['subject'])
+                );
         }
 
-        if ( isset($params['description']) ) {
-            $this->excel->getProperties()->setDescription(trim($params['description']));
+        if (isset($params['description'])) {
+            $this->excel
+                ->getProperties()
+                ->setDescription(
+                    trim($params['description'])
+                );
         } else {
-            $this->excel->getProperties()->setDescription('Data/godzina wygenerowania: %data_godzina_wygenerowania%');
+            $this->excel
+                ->getProperties()
+                ->setDescription('Data/godzina wygenerowania: %data_godzina_wygenerowania%');
         }
 
-        if ( isset($params['keywords']) && is_array($params['keywords']) && count($params['keywords']) > 0 ) {
-            $this->excel->getProperties()->setKeywords(implode(', ', $params['keywords']));
+        if (isset($params['keywords']) && is_array($params['keywords']) && count($params['keywords']) > 0) {
+            $this->excel
+                ->getProperties()
+                ->setKeywords(
+                    implode(', ', $params['keywords'])
+                );
         }
 
-        if ( isset($params['category']) ) {
-            $this->excel->getProperties()->setCategory(trim($params['category']));
+        if (isset($params['category'])) {
+            $this->excel
+                ->getProperties()
+                ->setCategory(
+                    trim($params['category'])
+                );
         }
 
         $this->switchToSheet(0);
 
-        if ( isset($params['sheet_title']) ) {
+        if (isset($params['sheet_title'])) {
             $sheetTitle = trim($params['sheet_title']);
 
-            if (mb_strlen($sheetTitle) > 31 ) {
+            if (mb_strlen($sheetTitle) > 31) {
                 $sheetTitle = mb_substr($sheetTitle, 0, 31);
             }
 
-            $this->sheet->setTitle($sheetTitle);
+            $this->sheet
+                ->setTitle($sheetTitle);
         }
     }
 
     /**
      * Turns on displaying additional information
      */
-    public function debugOn()
+    public function debugOn(): void
     {
         $this->debug = true;
     }
@@ -109,7 +160,7 @@ class XTable
     /**
      * Turns off displaying additional information
      */
-    public function debugOff()
+    public function debugOff(): void
     {
         $this->debug = false;
     }
@@ -117,15 +168,12 @@ class XTable
     /**
      * Inserts given value into the current cell and moves the internal pointer into the next cell on the right
      *
-     * @param string $value Value
-     * @param integer $colspan How many cells (including the current one) you wish to span (default value: 1 = no spanning)
-     * @param array $options Optional parameters (@see applyCellOptions())
-     *
-     * @return XTable
+     * @param int    $colspan How many cells (including the current one) you wish to span (default value: 1 = no spanning)
+     * @param array  $options Optional parameters (@see applyCellOptions())
      */
-    public function addValue($value, $colspan = 1, $options = array())
+    public function addValue(string $value, int $colspan = 1, array $options = []): self
     {
-        if ( is_object($value) ) {
+        if (is_object($value)) {
             $value = $value->__toString();
         }
 
@@ -133,22 +181,31 @@ class XTable
         // Because I operate on cell and rows numbers I have to convert given numbers into coordinates
         $cellCoords = $this->toCoords();
 
-        $this->displayDebugMessage('Do komórki o wspolrzednych (r:'. $this->row .', c:'. $this->coll .'), aka. '. $cellCoords .' wpisuje wartosc "'. $value .'"<br>');
+        $this->displayDebugMessage(
+            'Do komórki o wspolrzednych (r:'. $this->row .', c:'. $this->coll .'), aka. '. $cellCoords .' wpisuje wartosc "'. $value .'"<br>'
+        );
 
-        $result = $this->sheet->setCellValueByColumnAndRow($this->coll, $this->row, $value);
+        $this->sheet
+            ->setCellValueByColumnAndRow($this->coll, $this->row, $value);
 
         // If there is a newline char in the cell value (ALT+Enter) Excel automatically enables word wrap
         // That's why I do the exact same thing :)
-        if ( strpos($value, "\n") !== false ) {
-            $this->sheet->getStyle($cellCoords)->getAlignment()->setWrapText(true);
+        if (strpos($value, "\n") !== false) {
+            $this->sheet
+                ->getStyle($cellCoords)
+                ->getAlignment()
+                ->setWrapText(true);
         }
 
         // Optional cell parametrization
         $this->applyCellOptions($cellCoords, $options);
 
         // If I should merge cells...
-        if ( $colspan > 1 ) {
-            $this->sheet->mergeCells($cellCoords .':'. $this->toCoords(null, $this->coll+$colspan-1));
+        if ($colspan > 1) {
+            $this->sheet
+                ->mergeCells(
+                    $cellCoords .':'. $this->toCoords(null, $this->coll + $colspan - 1)
+                );
         }
 
         // Increase the internal pointer
@@ -165,12 +222,10 @@ class XTable
      * Default value: 1
      *
      * @param int $num How many columns should I skip (how far should I move the pointer)
-     *
-     * @return XTable
      */
-    public function skip($num = 1)
+    public function skip(int $num = 1): self
     {
-        if ( !is_numeric($num) || $num < 0 ) {
+        if ($num < 0) {
             $num = 1;
         }
 
@@ -182,11 +237,11 @@ class XTable
     }
 
     /**
-     * Moves the internal pointer into the first column of the next row (equivalent of \n\r, ie. new line + carriage return) and resets the row formatting options
-     *
-     * return XTable
+     * Moves the internal pointer into the first column of the next row
+     * (equivalent of \n\r, ie. new line + carriage return) and
+     * resets the row formatting options
      */
-    public function nextRow()
+    public function nextRow(): self
     {
         $this->row++;
         $this->coll = 0;
@@ -205,12 +260,8 @@ class XTable
      *   > bgcolor - background color; format: RRGGBB (without # in front!)
      *   > height - row height
      *   > bold - should the text be bold by default (true) or not (false; default)?
-     *
-     * @param array $options Options
-     *
-     * @return XTable
      */
-    public function setRowOptions(array $options = array())
+    public function setRowOptions(array $options = []): self
     {
         $this->clearRowOptions();
 
@@ -230,15 +281,15 @@ class XTable
      *
      * Constraint: only A-ZZ column range is currently supported (~700 columns)
      *
-     * @param integer $coll Column number (optional)
+     * @param int|null $coll Column number (optional)
      *
      * @return string Column coordinate
      */
-    public function columnNumberToColumnName($coll = null)
+    public function columnNumberToColumnName(int $coll = null): string
     {
         // @TODO try using ExcelUtils::convertNumberToColumnName()?
 
-        if ( is_null($coll) ) {
+        if (is_null($coll)) {
             $coll = $this->coll;
         }
 
@@ -246,11 +297,11 @@ class XTable
         $secondDigit = $coll - ($firstDigit * 26);
 
         $collName = '';
-        if ( $firstDigit > 0 ) {
-            $collName .= chr(64+$firstDigit);
+        if ($firstDigit > 0) {
+            $collName .= chr(64 + $firstDigit);
         }
 
-        $collName .= chr(65+$secondDigit);
+        $collName .= chr(65 + $secondDigit);
 
         return $collName;
     }
@@ -262,12 +313,12 @@ class XTable
      *
      * If no row number is given, the internal pointer's row will be used
      *
-     * @param integer $row Row number (optional)
-     * @param integer $coll Column number (optional)
+     * @param int|null $row  Row number (optional)
+     * @param int|null $coll Column number (optional)
      *
      * @return string Cell coordinates
      */
-    public function toCoords($row = null, $coll = null)
+    public function toCoords(int $row = null, int $coll = null): string
     {
         if ( is_null($row) ) {
             $row = $this->row;
@@ -281,52 +332,445 @@ class XTable
      *
      * @return array Row number (row) and column number (coll)
      */
-    public function toColumnAndRow($value)
+    public function toColumnAndRow(string $value): array
     {
-        return array(
-            'coll' => (ord($value{0})-65),
+        return [
+            'coll' => (ord($value{0}) - 65),
             'row'  => $value{1}
-        );
+        ];
     }
 
     /**
      * Get the row number where the internal pointer is currently at
-     *
-     * @return integer Current row number (1..)
      */
-    public function getRow()
+    public function getRow(): int
     {
         return $this->row;
     }
 
     /**
      * Get the column number where the internal pointer is currently at
-     *
-     * @return integer Current column number (0..)
      */
-    public function getColl()
+    public function getColl(): int
     {
         return $this->coll;
     }
 
     /**
      * Returns the current sheet
-     *
-     * @return PHPExcel_Worksheet Sheet
      */
-    public function getSheet()
+    public function getSheet(): PHPExcel_Worksheet
     {
         return $this->sheet;
     }
 
     /**
      * Returns the worksheet
-     *
-     * @return PHPExcel Worksheet
      */
-    public function getExcel()
+    public function getExcel(): PHPExcel
     {
         return $this->excel;
+    }
+
+    /**
+     * Automatically sets width on all cells in use in the current sheet
+     * based on their contents (it's not very precise)
+     */
+    public function autoSizeAllColumns(): self
+    {
+        for ($c = 0; $c < $this->maxColl; $c++) {
+            $collDim = $this->sheet
+                ->getColumnDimension(
+                    $this->columnNumberToColumnName($c)
+                );
+
+            if ($collDim->getWidth() == -1) {
+                $collDim->setAutoSize(true);
+            }
+        }
+
+        return $this;
+    }
+
+    /**
+     * Automatically sets the height on the current row based on its contents
+     *
+     * Height is calculated based on the following formula:
+     *   given number of pixels * MAX(numer of lines of text in all the row's cells)
+     *
+     * @param int $rowHeight How much height (in pixels) does every line of text get?
+     */
+    public function autoSizeRow(int $rowHeight = 12): void
+    {
+        $rowCellsLinesCount = [];
+        for ($c = 0; $c < $this->coll; $c++) {
+            $cellValue = $this->sheet
+                ->getCellByColumnAndRow($c, $this->row)
+                ->getValue();
+            $rowCellsLinesCount[] = $this->countNewlines($cellValue);
+        }
+
+        $maxLinesInRow = max($rowCellsLinesCount) + 1;
+
+        if ($maxLinesInRow > 1) {
+            $this->sheet
+                ->getRowDimension($this->row)
+                ->setRowHeight($rowHeight * $maxLinesInRow);
+        }
+    }
+
+    /**
+     * Resets (forgets) the remembered range start and ending coordinates
+     */
+    public function resetRange(): void
+    {
+        unset(
+            $this->rangeStart,
+            $this->rangeEnd
+        );
+    }
+
+    /**
+     * Begins (opens) a range
+     *
+     * If no coordinates for the range start point are given it will start at the current internal pointer location
+     *
+     * @param string|null $coords Cell coordinates (optional)
+     */
+    public function startRange(string $coords = null): void
+    {
+        $this->rangeStart = is_null($coords)
+            ? $this->toCoords()
+            : $coords;
+    }
+
+    /**
+     * Ends (finishes) a range
+     *
+     * If no coordinates for the range ending point are given it will end at the current internal pointer location
+     *
+     * If the range wasn't opened before, calling this method will be interpreted as call to open a range, not close it
+     *
+     * @param string|null $coords Cell coordinates (optional)
+     */
+    public function endRange(string $coords = null): void
+    {
+        // If I know the range starting point...
+        if ($this->rangeOpened()) {
+            $this->rangeEnd = is_null($coords)
+                ? $this->toCoords(null, $this->coll - 1)
+                : $coords;
+        } else {    // If the range wasn't opened, open it now
+            $this->startRange($coords);
+        }
+    }
+
+    /**
+     * Applies options to the given cell
+     *
+     * Available parameters:
+     *   > border-style (string):
+     *     - dashDot
+     *     - dashDotDot
+     *     - dashed
+     *     - dotted
+     *     - double
+     *     - hair
+     *     - medium
+     *     - mediumDashDot
+     *     - mediumDashDotDot
+     *     - mediumDashed
+     *     - none
+     *     - slantDashDot
+     *     - thick
+     *     - thin (default value)
+     *
+     *   > border-color - border color; format: RRGGBB (without # in front!)
+     *     default value: 000000 (black)
+     *
+     *   > bordering-type (string) - bordering type (aka. which borders are we using :))
+     *     - allborders (all borders)
+     *     - outline (default) (only outer borders)
+     *     - inside (only interior borders)
+     *     - vertical (only vertical borders)
+     *     - horizontal (only horizontal borders)
+     *
+     *   > font (array)
+     *     - bold (boolean)
+     *     - italic (boolean)
+     *     - size (integer)
+     *     - underline (boolean)
+     *     - strikethrough (boolean)
+     *     - subscript (boolean)
+     *     - superscript (boolean)
+     *
+     * WARNING: calling this method clears set range starting and ending points (if there were any set)
+     *
+     * If we only know the starting point of range, the current cell will become its ending point
+     *
+     * If range is unknown, given options are not applied.
+     */
+    public function setRangeOptions(array $options = []): void
+    {
+        // Close the range on the current cell if it's still open
+        if (!$this->rangeClosed()) {
+            $this->endRange();
+        }
+
+        // Bail if there is no range
+        if (!$this->rangeSet()) {
+            return;
+        }
+
+        if (empty($options)) {
+            return;
+        }
+
+        $rangeOptions = [];
+        if (
+            (array_key_exists('border-style', $options) && !empty($options['border-style']))
+            || (array_key_exists('border-color', $options) && !empty($options['border-color']))
+            || (array_key_exists('bordering-type', $options) && !empty($options['bordering-type']))
+        ) {
+            $bordersOptions = $this->extractBordersOptions($options);
+
+            $rangeOptions['borders'] = [
+                $bordersOptions['bordering-type'] => [
+                    'style' => $bordersOptions['style'],
+                    'color' => $bordersOptions['color'],
+                ]
+            ];
+        }
+
+        if (array_key_exists('font', $options) && !empty($options['font'])) {
+            $rangeOptions['font'] = $options['font'];
+        }
+
+        $this->sheet
+            ->getStyle($this->rangeStart .':'. $this->rangeEnd)
+            ->applyFromArray($rangeOptions);
+
+        $this->resetRange();
+    }
+
+    /**
+     * Applies options to the given column
+     *
+     * WARNING: calling this method will reset the currently set formatting for the given column
+     *
+     * see applyCollumOptions()
+     */
+    public function setColumnOptions(int $columnNo, array $options = []): self
+    {
+        $this->clearColumnOptions($columnNo);
+        $this->applyColumnOptions($columnNo, $options);
+
+        return $this;
+    }
+
+    /**
+     * Sets page header (applies to printing)
+     *
+     * @param bool $odd true (default) if this header should be used only on odd pages, false otherwise (warning: all pages will get the exact same header if enableOddEvenHeaderAndFooter(true) is not called!)
+     */
+    public function setSheetHeader(string $content, bool $odd = true): bool
+    {
+        if (empty($content)) {
+            return false;
+        }
+
+        if ($odd) {
+            $this->sheet
+                ->getHeaderFooter()
+                ->setOddHeader($content);
+        }
+        else {
+            $this->sheet
+                ->getHeaderFooter()
+                ->setEvenHeader($content);
+        }
+
+        return true;
+    }
+
+    /**
+     * Sets page footer (applies to printing)
+     *
+     * @param bool $odd true (default) if this header should be used only on odd pages, false otherwise (warning: all pages will get the exact same header if enableOddEvenHeaderAndFooter(true) is not called!)
+     */
+    public function setSheetFooter(string $content, bool $odd = true): bool
+    {
+        if (empty($content)) {
+            return false;
+        }
+
+        if ($odd) {
+            $this->sheet
+                ->getHeaderFooter()
+                ->setOddFooter($content);
+        }
+        else {
+            $this->sheet
+                ->getHeaderFooter()
+                ->setEvenFooter($content);
+        }
+
+        return true;
+    }
+
+    /**
+     * Returns the page header
+     *
+     * @param bool $odd true (default) if you want the odd pages header, false - otherwise
+     */
+    public function getSheetHeader(bool $odd = true): PHPExcel_Worksheet_HeaderFooter
+    {
+        if ($odd) {
+            return $this->sheet
+                ->getHeaderFooter()
+                ->getOddHeader();
+        }
+
+        return $this->sheet
+            ->getHeaderFooter()
+            ->getEvenHeader();
+    }
+
+    /**
+     * Returns the page footer
+     *
+     * @param bool $odd true (default) if you want the odd pages footer, false - otherwise
+     */
+    public function getSheetFooter(bool $odd = true): PHPExcel_Worksheet_HeaderFooter
+    {
+        if ($odd) {
+            return $this->sheet
+                ->getHeaderFooter()
+                ->getOddFooter();
+        }
+
+        return $this->sheet
+            ->getHeaderFooter()
+            ->getEvenFooter();
+    }
+
+    /**
+     * Turns on separation of headers and footers on odd and even pages
+     *
+     * WARNING: by default this separation IS NOT ON!
+     */
+    public function enableOddEvenHeaderAndFooter(bool $enable): void
+    {
+        $this->sheet
+            ->getHeaderFooter()
+            ->setDifferentOddEven($enable);
+    }
+
+    /**
+     * Tells if the separation of headers and footers on odd and even pages is turned on
+     */
+    public function isOddEvenHeaderAndFooterEnabled(): bool
+    {
+        return $this->sheet
+            ->getHeaderFooter()
+            ->getDifferentOddEven();
+    }
+
+    /**
+     * Sets the default font size for all the worksheet cells
+     *
+     * WARNING: this applies only to content added AFTER this method is called!
+     */
+    public function setDefaultFontSize(int $size): void
+    {
+        if ($size > 1) {
+            $this->defaultFontSize = $size;
+        }
+    }
+
+    /**
+     * Returns the currently set default font size (if any was set)
+     */
+    public function getDefaultFontSize(): ?int
+    {
+        return $this->defaultFontSize;
+    }
+
+    /**
+     * Sets the worksheet this wrapper should work on instead of the one it created itself
+     */
+    public function loadExistingExcel(PHPExcel $excel): self
+    {
+        $this->excel = $excel;
+
+        return $this;
+    }
+
+    /**
+     * Adds a new sheet to the worksheet and switches to it
+     *
+     * Available options:
+     *  > show_lines (boolean) - true if grid lines should be shown
+     *
+     * @param string|null $title Name/title of the new sheet
+     */
+    public function addAndSwitchToSheet(string $title = null, array $options = []): self
+    {
+        $this->excel
+            ->createSheet();
+
+        $this->switchToSheet(++$this->sheetNo);
+
+        if (null !== $title) {
+            $this->excel
+                ->getActiveSheet()
+                ->setTitle($title);
+        }
+
+        if (is_array($options) && count($options)) {
+            if (array_key_exists('show_lines', $options)) {
+                $this->excel
+                    ->getActiveSheet()
+                    ->setShowGridLines((bool)$options['show_lines']);
+            }
+        }
+
+        return $this;
+    }
+
+    /**
+     * Switches to the given sheet (0-...)
+     */
+    public function switchToSheet(int $sheetNumber): self
+    {
+        $this->sheetNo = $sheetNumber;
+        $this->excel
+            ->setActiveSheetIndex($this->sheetNo);
+        $this->sheet = $this->excel
+            ->getActiveSheet();
+
+        return $this;
+    }
+
+    /**
+     * Sets options that will be applied to every cell of the worksheet from now on
+     *
+     * Each of the options applied here can be overridden by addValue() third argument
+     *
+     * @see AddValue()
+     */
+    public function setGlobalCellOptions(array $options = []): self
+    {
+        $this->globalCellOptions = $options;
+
+        return $this;
+    }
+
+    public function setCurrentRowOptions(array $options = []): self
+    {
+        $this->currentRowOptions = $options;
+
+        return $this;
     }
 
     /**
@@ -384,151 +828,187 @@ class XTable
      *          > height (float) - comment field height (default: 55.5 points)
      *          > width (float) - comment field width (default: 96 punktów)
      *   > hyperlink (boolean) - convert cell value into a hyperlink (causion!)
-     *
-     * @param string $cell_coords Cell coordinates
-     * @param array $options Parameters
      */
-    private function applyCellOptions($cell_coords, $options)
+    private function applyCellOptions(string $cellCoords, array $options): void
     {
-        $style = $this->sheet->getStyle($cell_coords);
+        $style = $this->sheet
+                ->getStyle($cellCoords);
 
-        $options = array_merge(array_merge($options, $this->globalCellOptions), $this->currentRowOptions);
+        $allOptions = array_merge(
+            array_merge($options, $this->globalCellOptions),
+            $this->currentRowOptions
+        );
 
-        if ( isset($options['bgcolor']) && !is_null($options['bgcolor']) ) {
-            $style->getFill()->setFillType(PHPExcel_Style_Fill::FILL_SOLID);
-            $style->getFill()->getStartColor()->setARGB('FF'. $options['bgcolor']);
+        if (isset($allOptions['bgcolor']) && !is_null($allOptions['bgcolor'])) {
+            $style->getFill()
+                ->setFillType(PHPExcel_Style_Fill::FILL_SOLID);
+            $style->getFill()
+                ->getStartColor()
+                ->setARGB('FF'. $allOptions['bgcolor']);
         }
 
-        if ( isset($options['bold']) ) {
-            $style->getFont()->setBold((boolean)$options['bold']);
+        if (isset($allOptions['bold'])) {
+            $style->getFont()
+                ->setBold((bool)$allOptions['bold']);
         }
 
-        if ( isset($options['italic']) ) {
-            $style->getFont()->setItalic((boolean)$options['italic']);
+        if (isset($allOptions['italic'])) {
+            $style->getFont()
+                ->setItalic((bool)$allOptions['italic']);
         }
 
-        if ( isset($options['underline']) ) {
-            $style->getFont()->setUnderline((boolean)$options['underline']);
+        if (isset($allOptions['underline'])) {
+            $style->getFont()
+                ->setUnderline((bool)$allOptions['underline']);
         }
 
-        if ( isset($options['strikethrough']) ) {
-            $style->getFont()->setStrikethrough((boolean)$options['strikethrough']);
+        if (isset($allOptions['strikethrough'])) {
+            $style->getFont()
+                ->setStrikethrough((bool)$allOptions['strikethrough']);
         }
 
-        if ( isset($options['subscript']) ) {
-            $style->getFont()->setSubScript((boolean)$options['subscript']);
+        if (isset($allOptions['subscript'])) {
+            $style->getFont()
+                ->setSubScript((bool)$allOptions['subscript']);
         }
 
-        if ( isset($options['superscript']) ) {
-            $style->getFont()->setSuperScript((boolean)$options['superscript']);
+        if (isset($allOptions['superscript'])) {
+            $style->getFont()
+                ->setSuperScript((bool)$allOptions['superscript']);
         }
 
-        if ( isset($options['wrap']) ) {
-            $style->getAlignment()->setWrapText((boolean)$options['wrap']);
+        if (isset($allOptions['wrap'])) {
+            $style->getAlignment()
+                ->setWrapText((bool)$allOptions['wrap']);
         }
 
-        if ( isset($options['font-size']) ) {
-            $style->getFont()->setSize((integer)$options['font-size']);
-        } elseif ( !empty($this->defaultFontSize) ) {
-            $style->getFont()->setSize((integer)$this->defaultFontSize);
+        if (isset($allOptions['font-size'])) {
+            $style->getFont()
+                ->setSize((int)$allOptions['font-size']);
+        } elseif (!empty($this->defaultFontSize)) {
+            $style->getFont()
+                ->setSize((int)$this->defaultFontSize);
         }
 
         // center, left, right, justify, general, centerContinous
-        if ( isset($options['text-align']) && !is_null($options['text-align']) ) {
-            $style->getAlignment()->setHorizontal($options['text-align']);
+        if (isset($allOptions['text-align']) && !is_null($allOptions['text-align'])) {
+            $style->getAlignment()
+                ->setHorizontal($allOptions['text-align']);
         }
 
         // bottom, center, justify, top
-        if ( isset($options['vertical-align']) && !is_null($options['vertical-align']) ) {
-            $style->getAlignment()->setVertical($options['vertical-align']);
+        if (isset($allOptions['vertical-align']) && !is_null($allOptions['vertical-align'])) {
+            $style->getAlignment()
+                ->setVertical($allOptions['vertical-align']);
         }
 
-        if ( array_key_exists('borders', $options) && !empty($options['borders']) ) {
-            //echo 'dla komórki '. $cell_coords .' ustawiasz obramowanie<br>';
+        if (array_key_exists('borders', $allOptions) && !empty($allOptions['borders'])) {
+            $bordersOptions = [];
 
-            $bordersOptions = array();
-
-            if ( array_key_exists('top', $options['borders']) && !empty($options['borders']['top']) ) {
-                $bordersOptions['top'] = $this->extractBordersOptions($options['borders']['top']);
+            if (array_key_exists('top', $allOptions['borders']) && !empty($allOptions['borders']['top'])) {
+                $bordersOptions['top'] = $this->extractBordersOptions($allOptions['borders']['top']);
             }
 
-            if ( array_key_exists('bottom', $options['borders']) && !empty($options['borders']['bottom']) ) {
-                $bordersOptions['bottom'] = $this->extractBordersOptions($options['borders']['bottom']);
+            if (array_key_exists('bottom', $allOptions['borders']) && !empty($allOptions['borders']['bottom'])) {
+                $bordersOptions['bottom'] = $this->extractBordersOptions($allOptions['borders']['bottom']);
             }
 
-            if ( array_key_exists('left', $options['borders']) && !empty($options['borders']['left']) ) {
-                $bordersOptions['left'] = $this->extractBordersOptions($options['borders']['left']);
+            if (array_key_exists('left', $allOptions['borders']) && !empty($allOptions['borders']['left'])) {
+                $bordersOptions['left'] = $this->extractBordersOptions($allOptions['borders']['left']);
             }
 
-            if ( array_key_exists('right', $options['borders']) && !empty($options['borders']['right']) ) {
-                $bordersOptions['right'] = $this->extractBordersOptions($options['borders']['right']);
+            if (array_key_exists('right', $allOptions['borders']) && !empty($allOptions['borders']['right'])) {
+                $bordersOptions['right'] = $this->extractBordersOptions($allOptions['borders']['right']);
             }
 
-            if ( !empty($bordersOptions) ) {
-                $style->getBorders()->applyFromArray($bordersOptions);
+            if (!empty($bordersOptions)) {
+                $style->getBorders()
+                    ->applyFromArray($bordersOptions);
             }
         }
 
-        if ( isset($options['comment']) && is_array($options['comment']) && array_key_exists('lines', $options['comment']) && count($options['comment']['lines']) > 0 ) {
-            $comment = $this->sheet->getComment($cell_coords);
+        if (isset($allOptions['comment'])
+            && is_array($allOptions['comment'])
+            && array_key_exists('lines', $allOptions['comment'])
+            && count($allOptions['comment']['lines']) > 0
+        ) {
+            $comment = $this->sheet
+                ->getComment($cellCoords);
 
-            foreach ( $options['comment']['lines'] as $commentTextAndOptions ) {
-                if ( !array_key_exists('text', $commentTextAndOptions) || '' === trim($commentTextAndOptions['text']) || null === $commentTextAndOptions['text'] ) {
+            foreach ($allOptions['comment']['lines'] as $commentTextAndOptions) {
+                if (!array_key_exists('text', $commentTextAndOptions)
+                    || '' === trim($commentTextAndOptions['text'])
+                    || null === $commentTextAndOptions['text']
+                ) {
                     break;
                 }
 
-                $commentText = $comment->getText()->createTextRun($commentTextAndOptions['text']);
+                $commentText = $comment->getText()
+                    ->createTextRun($commentTextAndOptions['text']);
 
-                if ( array_key_exists('options', $commentTextAndOptions) && is_array($commentTextAndOptions['options']) ) {
+                if (array_key_exists('options', $commentTextAndOptions)
+                    && is_array($commentTextAndOptions['options'])
+                ) {
                     $this->applyCellCommentTextOptions($commentText, $commentTextAndOptions['options']);
                 }
                 $comment->getText()->createTextRun("\r\n");
             }
 
-            if ( array_key_exists('options', $options['comment']) && is_array($options['comment']['options']) ) {
-                $this->applyCellCommentOptions($comment, $options['comment']['options']);
+            if (array_key_exists('options', $allOptions['comment'])
+                && is_array($allOptions['comment']['options'])
+            ) {
+                $this->applyCellCommentOptions($comment, $allOptions['comment']['options']);
             }
         }
 
-        if ( isset($options['hyperlink']) && true === (boolean)$options['hyperlink'] ) {
-            $value = $this->sheet->getCell($cell_coords)->getValue();
+        if (isset($allOptions['hyperlink']) && true === (bool)$allOptions['hyperlink']) {
+            $value = $this->sheet
+                ->getCell($cellCoords)
+                ->getValue();
 
             $isEmail = filter_var($value, FILTER_VALIDATE_EMAIL);
             $isUrl   = filter_var($value, FILTER_VALIDATE_URL);
 
-            if ( $isEmail ) {
-                $this->sheet->getCell($cell_coords)->getHyperlink()->setUrl('mailto:'. $value);
-            } elseif ( $isUrl ) {
-                $this->sheet->getCell($cell_coords)->getHyperlink()->setUrl($value);
+            if ($isEmail) {
+                $this->sheet
+                    ->getCell($cellCoords)
+                    ->getHyperlink()
+                    ->setUrl('mailto:'. $value);
+            } elseif ($isUrl) {
+                $this->sheet
+                    ->getCell($cellCoords)
+                    ->getHyperlink()
+                    ->setUrl($value);
             }
         }
     }
 
-    private function applyCellCommentOptions(\PHPExcel_Comment $comment, array $options)
+    private function applyCellCommentOptions(PHPExcel_Comment $comment, array $options): void
     {
-        $setHeight = (array_key_exists('height', $options) && is_numeric($options['height']) && $options['height'] > 0 );
+        $setHeight = (array_key_exists('height', $options)
+            && is_numeric($options['height'])
+            && $options['height'] > 0);
 
-        if ( $setHeight ) {
-            $height = $options['height'] .'pt';
-
-            $comment->setHeight($height);
+        if ($setHeight) {
+            $comment->setHeight($options['height'] .'pt');
         }
 
-        $setWidth = (array_key_exists('width', $options) && is_numeric($options['width']) && $options['width'] > 0 );
+        $setWidth = (array_key_exists('width', $options)
+            && is_numeric($options['width'])
+            && $options['width'] > 0);
 
-        if ( $setWidth ) {
-            $width = $options['width'] .'pt';
-
-            $comment->setWidth($width);
+        if ($setWidth) {
+            $comment->setWidth($options['width'] .'pt');
         }
     }
 
-    private function applyCellCommentTextOptions(\PHPExcel_RichText_Run $commentText, array $options)
+    private function applyCellCommentTextOptions(PHPExcel_RichText_Run $commentText, array $options): void
     {
         $makeBold = (array_key_exists('bold', $options) && true === $options['bold']);
 
-        if ( $makeBold ) {
-            $commentText->getFont()->setBold($makeBold);
+        if ($makeBold) {
+            $commentText->getFont()
+                ->setBold($makeBold);
         }
     }
 
@@ -537,9 +1017,9 @@ class XTable
      *
      * @see applyRowOptions()
      */
-    private function clearRowOptions()
+    private function clearRowOptions(): void
     {
-        $this->currentRowOptions = array();
+        $this->currentRowOptions = [];
     }
 
     /**
@@ -547,267 +1027,69 @@ class XTable
      *
      * @param array $options Parametry
      */
-    private function applyRowOptions($options = array())
+    private function applyRowOptions($options = []): void
     {
-        if ( isset($options['height']) && is_numeric($options['height']) ) {
-            $this->sheet->getRowDimension($this->row)->setRowHeight($options['height']);
-        }
-    }
-
-    /**
-     * Automatically sets width on all cells in use in the current sheet based on their contents (it's not very precise)
-     *
-     * @return XTable
-     */
-    public function autoSizeAllColumns()
-    {
-        for ( $c = 0; $c < $this->maxColl; $c++ ) {
-            $collDim = $this->sheet->getColumnDimension($this->columnNumberToColumnName($c));
-
-            if ( $collDim->getWidth() == -1 ) {
-                $collDim->setAutoSize(true);
-            }
-        }
-
-        return $this;
-    }
-
-    /**
-     * Automatically sets the height on the current row based on its contents
-     *
-     * Height is calculated based on the following formula:
-     *   given number of pixels * MAX(numer of lines of text in all the row's cells)
-     *
-     * @param integer $row_height How much height (in pixels) does every line of text get?
-     */
-    public function autoSizeRow($row_height = 12)
-    {
-        $rowCellsLinesCount = array();
-        for ( $c = 0; $c < $this->coll; $c++ ) {
-            $cellValue = $this->sheet->getCellByColumnAndRow($c, $this->row)->getValue();
-            $rowCellsLinesCount[] = $this->countNewlines($cellValue);
-        }
-
-        $maxLinesInRow = ( max($rowCellsLinesCount) + 1 );
-
-        if ( $maxLinesInRow > 1 ) {
-            $this->sheet->getRowDimension($this->row)->setRowHeight($row_height * $maxLinesInRow);
+        if (isset($options['height']) && is_numeric($options['height'])) {
+            $this->sheet
+                ->getRowDimension($this->row)
+                ->setRowHeight($options['height']);
         }
     }
 
     /**
      * Returns the number of newline chars in the given string
-     *
-     * @param string $string
-     *
-     * @return integer
      */
-    private function countNewlines($string)
+    private function countNewlines(string $string): int
     {
-        return ( strpos($string, "\n") !== false ? count(explode("\n", $string)) : 0 );
-    }
-
-    /**
-     * Resets (forgets) the remembered range start and ending coordinates
-     */
-    public function resetRange()
-    {
-        unset(
-            $this->rangeStart,
-            $this->rangeEnd
-        );
-    }
-
-    /**
-     * Begins (opens) a range
-     *
-     * If no coordinates for the range start point are given it will start at the current internal pointer location
-     *
-     * @param string $coords Cell coordinates (optional)
-     */
-    public function startRange($coords = null)
-    {
-        $this->rangeStart = ( is_null($coords) ? $this->toCoords() : $coords );
-    }
-
-    /**
-     * Ends (finishes) a range
-     *
-     * If no coordinates for the range ending point are given it will end at the current internal pointer location
-     *
-     * If the range wasn't opened before, calling this method will be interpreted as call to open a range, not close it
-     *
-     * @param string $coords Cell coordinates (optional)
-     */
-    public function endRange($coords = null)
-    {
-        // If I know the range starting point...
-        if ( $this->rangeOpened() ) {
-            $this->rangeEnd = ( is_null($coords) ? $this->toCoords(null, $this->coll-1) : $coords );
-        }
-        // If the range wasn't opened, open it now
-        else {
-            $this->startRange($coords);
-        }
-    }
-
-    /**
-     * Applies options to the given cell
-     *
-     * Available parameters:
-     *   > border-style (string):
-     *     - dashDot
-     *     - dashDotDot
-     *     - dashed
-     *     - dotted
-     *     - double
-     *     - hair
-     *     - medium
-     *     - mediumDashDot
-     *     - mediumDashDotDot
-     *     - mediumDashed
-     *     - none
-     *     - slantDashDot
-     *     - thick
-     *     - thin (default value)
-     *
-     *   > border-color - border color; format: RRGGBB (without # in front!)
-     *     default value: 000000 (black)
-     *
-     *   > bordering-type (string) - bordering type (aka. which borders are we using :))
-     *     - allborders (all borders)
-     *     - outline (default) (only outer borders)
-     *     - inside (only interior borders)
-     *     - vertical (only vertical borders)
-     *     - horizontal (only horizontal borders)
-     *
-     *   > font (array)
-     *     - bold (boolean)
-     *     - italic (boolean)
-     *     - size (integer)
-     *     - underline (boolean)
-     *     - strikethrough (boolean)
-     *     - subscript (boolean)
-     *     - superscript (boolean)
-     *
-     * WARNING: calling this method clears set range starting and ending points (if there were any set)
-     *
-     * If we only know the starting point of range, the current cell will become its ending point
-     *
-     * If range is unknown, given options are not applied.
-     *
-     * @param array $options Parameters
-     */
-    public function setRangeOptions($options = array())
-    {
-        // Close the range on the current cell if it's still open
-        if ( !$this->rangeClosed() ) {
-            $this->endRange();
-        }
-
-        // Bail if there is no range
-        if ( !$this->rangeSet() ) {
-            return;
-        }
-
-        if ( empty($options) ) {
-            return;
-        }
-
-        $rangeOptions = array();
-
-        if (
-            ( array_key_exists('border-style', $options) && !empty($options['border-style']) ) ||
-            ( array_key_exists('border-color', $options) && !empty($options['border-color']) ) ||
-            ( array_key_exists('bordering-type', $options) && !empty($options['bordering-type']) )
-        ) {
-            $bordersOptions = $this->extractBordersOptions($options);
-
-            $rangeOptions['borders'] = array(
-                $bordersOptions['bordering-type'] => array(
-                    'style' => $bordersOptions['style'],
-                    'color' => $bordersOptions['color'],
-                )
-            );
-        }
-
-        if ( array_key_exists('font', $options) && !empty($options['font']) ) {
-            $rangeOptions['font'] = $options['font'];
-        }
-
-        $this->sheet->getStyle($this->rangeStart .':'. $this->rangeEnd)->applyFromArray($rangeOptions);
-
-        $this->resetRange();
+        return strpos($string, "\n") !== false
+            ? count(explode("\n", $string))
+            : 0;
     }
 
     /**
      * Tells if we know the range starting point
-     *
-     * @return boolean
      */
-    private function rangeOpened()
+    private function rangeOpened(): bool
     {
         return isset($this->rangeStart);
     }
 
     /**
      * Tells if we know the range ending point
-     *
-     * @return boolean
      */
-    private function rangeClosed()
+    private function rangeClosed(): bool
     {
         return isset($this->rangeEnd);
     }
 
     /**
      * Tells if we do have a range set (we know its starting and ending points)
-     *
-     * @return boolean
      */
-    private function rangeSet()
+    private function rangeSet(): bool
     {
-        return ( $this->rangeOpened() && $this->rangeClosed() );
+        return $this->rangeOpened() && $this->rangeClosed();
     }
 
-    protected function bumpMaxColl()
+    private function bumpMaxColl(): void
     {
-        if ( $this->coll > $this->maxColl ) {
+        if ($this->coll > $this->maxColl) {
             $this->maxColl = $this->coll;
         }
-    }
-
-    /**
-     * Applies options to the given column
-     *
-     * WARNING: calling this method will reset the currently set formatting for the given column
-     *
-     * see applyCollumOptions()
-     *
-     * @param integer $column_no Column number (1..n)
-     * @param array $options Parameters
-     *
-     * @return XTable
-     */
-    public function setColumnOptions($column_no, $options = array())
-    {
-        $this->clearColumnOptions($column_no);
-        $this->applyColumnOptions($column_no, $options);
-
-        return $this;
     }
 
     /**
      * Resets the currently set formatting for the given column
      *
      * @see applyColumnOptions()
-     *
-     * @param integer $column_no Column number (1..n)
      */
-    private function clearColumnOptions($column_no)
+    private function clearColumnOptions(int $columnNo): void
     {
-        if ( is_numeric($column_no) && $column_no > 0 ) {
-            $this->sheet->getColumnDimension($this->columnNumberToColumnName($column_no-1))->setWidth(-1);
+        if ($columnNo > 0) {
+            $this->sheet
+                ->getColumnDimension(
+                    $this->columnNumberToColumnName($columnNo-1)
+                )
+                ->setWidth(-1);
         }
     }
 
@@ -816,93 +1098,97 @@ class XTable
      *
      * Available parameters:
      *   > width - column width
-     *
-     * @param integer $column_no Column number (1..n)
-     * @param array $options Parameters
      */
-    private function applyColumnOptions($column_no, $options = array())
+    private function applyColumnOptions(int $columnNo, array $options = []): void
     {
-        if ( is_numeric($column_no) && $column_no > 0 ) {
-            if ( isset($options['width']) && is_numeric($options['width']) && $options['width'] > 0 ) {
-                $this->sheet->getColumnDimension($this->columnNumberToColumnName($column_no-1))->setWidth($options['width']);
+        if ($columnNo > 0) {
+            if (isset($options['width'])
+                && is_numeric($options['width'])
+                && $options['width'] > 0
+            ) {
+                $this->sheet
+                    ->getColumnDimension(
+                        $this->columnNumberToColumnName($columnNo-1)
+                    )
+                    ->setWidth($options['width']);
             }
         }
     }
 
-    private function extractBordersOptions($options)
+    private function extractBordersOptions(array $options): array
     {
-        $out = array(
+        $out = [
             'style'          => PHPExcel_Style_Border::BORDER_THIN,
-            'color'          => array('argb' => 'FF000000'),
+            'color'          => ['argb' => 'FF000000'],
             'bordering-type' => 'outline',
-        );
+        ];
 
-        if ( array_key_exists('border-style', $options) ) {
-            switch ( $options['border-style'] ) {
+        if (array_key_exists('border-style', $options)) {
+            switch ($options['border-style']) {
                 case 'dashDot':
                     $out['style'] = PHPExcel_Style_Border::BORDER_DASHDOT;
-                break;
+                    break;
 
                 case 'dashDotDot':
                     $out['style'] = PHPExcel_Style_Border::BORDER_DASHDOTDOT;
-                break;
+                    break;
 
                 case 'dashed':
                     $out['style'] = PHPExcel_Style_Border::BORDER_DASHED;
-                break;
+                    break;
 
                 case 'dotted':
                     $out['style'] = PHPExcel_Style_Border::BORDER_DOTTED;
-                break;
+                    break;
 
                 case 'double':
                     $out['style'] = PHPExcel_Style_Border::BORDER_DOUBLE;
-                break;
+                    break;
 
                 case 'hair':
                     $out['style'] = PHPExcel_Style_Border::BORDER_HAIR;
-                break;
+                    break;
 
                 case 'medium':
                     $out['style'] = PHPExcel_Style_Border::BORDER_MEDIUM;
-                break;
+                    break;
 
                 case 'mediumDashDot':
                     $out['style'] = PHPExcel_Style_Border::BORDER_MEDIUMDASHDOT;
-                break;
+                    break;
 
                 case 'mediumDashDotDot':
                     $out['style'] = PHPExcel_Style_Border::BORDER_MEDIUMDASHDOTDOT;
-                break;
+                    break;
 
                 case 'mediumDashed':
                     $out['style'] = PHPExcel_Style_Border::BORDER_MEDIUMDASHED;
-                break;
+                    break;
 
                 case 'none':
                     $out['style'] = PHPExcel_Style_Border::BORDER_NONE;
-                break;
+                    break;
 
                 case 'slantDashDot':
                     $out['style'] = PHPExcel_Style_Border::BORDER_SLANTDASHDOT;
-                break;
+                    break;
 
                 case 'thick':
                     $out['style'] = PHPExcel_Style_Border::BORDER_THICK;
-                break;
+                    break;
 
                 case 'thin':
                     $out['style'] = PHPExcel_Style_Border::BORDER_THIN;
-                break;
+                    break;
 
                 /*default:
                     $out['style'] = PHPExcel_Style_Border::BORDER_THIN;
-                break;*/
+                    break;*/
             }
         }
 
-        if ( array_key_exists('bordering-type', $options) ) {
-            switch ( $options['bordering-type'] ) {
+        if (array_key_exists('bordering-type', $options)) {
+            switch ($options['bordering-type']) {
                 case 'allborders':
                 case 'outline':
                 case 'inside':
@@ -913,237 +1199,28 @@ class XTable
                 case 'left':
                 case 'right':
                     $out['bordering-type'] = $options['bordering-type'];
-                break;
+                    break;
 
                 /*default:
                     $out['bordering-type'] = 'outline';
-                break;*/
+                    break;*/
             }
         }
 
-        if ( array_key_exists('border-color', $options) ) {
-            if ( isset($options['border-color']) ) {
-                $out['color'] = array('argb' => 'FF'. $options['border-color']);
+        if (array_key_exists('border-color', $options)) {
+            if (isset($options['border-color'])) {
+                $out['color'] = [
+                    'argb' => 'FF'. $options['border-color']
+                ];
             }
         }
 
         return $out;
     }
 
-    /**
-     * Sets page header (applies to printing)
-     *
-     * @param string $content Header content
-     * @param boolean $odd true (default) if this header should be used only on odd pages, false otherwise (warning: all pages will get the exact same header if enableOddEvenHeaderAndFooter(true) is not called!)
-     *
-     * @return boolean
-     */
-    public function setSheetHeader($content, $odd = true)
+    private function displayDebugMessage(string $message): void
     {
-        if ( empty($content) ) {
-            return false;
-        }
-
-        if ( $odd ) {
-            $this->sheet->getHeaderFooter()->setOddHeader($content);
-        }
-        else {
-            $this->sheet->getHeaderFooter()->setEvenHeader($content);
-        }
-
-        return true;
-    }
-
-    /**
-     * Sets page footer (applies to printing)
-     *
-     * @param string $content Footer content
-     * @param boolean $odd true (default) if this header should be used only on odd pages, false otherwise (warning: all pages will get the exact same header if enableOddEvenHeaderAndFooter(true) is not called!)
-     *
-     * @return boolean
-     */
-    public function setSheetFooter($content, $odd = true)
-    {
-        if ( empty($content) ) {
-            return false;
-        }
-
-        if ( $odd ) {
-            $this->sheet->getHeaderFooter()->setOddFooter($content);
-        }
-        else {
-            $this->sheet->getHeaderFooter()->setEvenFooter($content);
-        }
-
-        return true;
-    }
-
-    /**
-     * Returns the page header
-     *
-     * @param boolean $odd true (default) if you want the odd pages header, false - otherwise
-     *
-     * @return PHPExcel_Worksheet_HeaderFooter
-     */
-    public function getSheetHeader($odd = true)
-    {
-        if ( $odd ) {
-            return $this->sheet->getHeaderFooter()->getOddHeader();
-        } else {
-            return $this->sheet->getHeaderFooter()->getEvenHeader();
-        }
-    }
-
-    /**
-     * Returns the page footer
-     *
-     * @param boolean $odd true (default) if you want the odd pages footer, false - otherwise
-     *
-     * @return PHPExcel_Worksheet_HeaderFooter
-     */
-    public function getSheetFooter($odd = true)
-    {
-        if ( $odd ) {
-            return $this->sheet->getHeaderFooter()->getOddFooter();
-        } else {
-            return $this->sheet->getHeaderFooter()->getEvenFooter();
-        }
-    }
-
-    /**
-     * Turns on separation of headers and footers on odd and even pages
-     *
-     * WARNING: by default this separation IS NOT ON!
-     *
-     * @param boolean $enable
-     */
-    public function enableOddEvenHeaderAndFooter($enable)
-    {
-        $this->sheet->getHeaderFooter()->setDifferentOddEven($enable);
-    }
-
-    /**
-     * Tells if the separation of headers and footers on odd and even pages is turned on
-     *
-     * @return boolean
-     */
-    public function isOddEvenHeaderAndFooterEnabled()
-    {
-        return $this->sheet->getHeaderFooter()->getDifferentOddEven();
-    }
-
-    /**
-     * Sets the default font size for all the worksheet cells
-     *
-     * WARNING: this applies only to content added AFTER this method is called!
-     *
-     * @param integer $size Font size
-     */
-    public function setDefaultFontSize($size)
-    {
-        if ( is_numeric($size) && $size > 1 ) {
-            $this->defaultFontSize = $size;
-        }
-    }
-
-    /**
-     * Returns the currently set default font size (if any was set)
-     *
-     * @return integer|null
-     */
-    public function getDefaultFontSize()
-    {
-        return $this->defaultFontSize;
-    }
-
-    /**
-     * Sets the worksheet this wrapper should work on instead of the one it created itself
-     *
-     * @param \PHPExcel $excel Worksheet
-     *
-     * @return XTable
-     */
-    public function loadExistingExcel(\PHPExcel $excel)
-    {
-        $this->excel = $excel;
-
-        return $this;
-    }
-
-    /**
-     * Adds a new sheet to the worksheet and switches to it
-     *
-     * Available options:
-     *  > show_lines (boolean) - true if grid lines should be shown
-     *
-     * @param string $title Name/title of the new sheet
-     * @param array $options Options (optional)
-     *
-     * @return XTable
-     */
-    public function addAndSwitchToSheet($title = null, array $options = array())
-    {
-        $this->excel->createSheet();
-
-        $this->switchToSheet(++$this->sheetNo);
-
-        if ( null !== $title ) {
-            $this->excel->getActiveSheet()->setTitle($title);
-        }
-
-        if ( is_array($options) && count($options) ) {
-            if ( array_key_exists('show_lines', $options) ) {
-                $this->excel->getActiveSheet()->setShowGridLines((boolean)$options['show_lines']);
-            }
-        }
-
-        return $this;
-    }
-
-    /**
-     * Switches to the given sheet (0-...)
-     *
-     * @param integer $sheetNumber
-     *
-     * @return XTable
-     */
-    public function switchToSheet($sheetNumber)
-    {
-        $this->sheetNo = $sheetNumber;
-        $this->excel->setActiveSheetIndex($this->sheetNo);
-        $this->sheet = $this->excel->getActiveSheet();
-
-        return $this;
-    }
-
-    /**
-     * Sets options that will be applied to every cell of the worksheet from now on
-     *
-     * Each of the options applied here can be overridden by addValue() third argument
-     *
-     * @see AddValue()
-     *
-     * @param array $options Options
-     *
-     * @return XTable
-     */
-    public function setGlobalCellOptions(array $options = array())
-    {
-        $this->globalCellOptions = $options;
-
-        return $this;
-    }
-
-    public function setCurrentRowOptions(array $options = array())
-    {
-        $this->currentRowOptions = $options;
-
-        return $this;
-    }
-
-    private function displayDebugMessage($message)
-    {
-        if ( $this->debug ) {
+        if ($this->debug) {
             echo $message . PHP_EOL;
         }
     }
