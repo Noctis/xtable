@@ -1,8 +1,8 @@
 {
     "name": "noctis/xtable",
     "type": "library",
-    "description": "Simple wrapper for PHPExcel",
-    "keywords": ["excel","phpexcel","xtable","wrapper"],
+    "description": "Simple wrapper for PHPSpreadsheet",
+    "keywords": ["excel","phpexcel","xtable","wrapper","phpspreadsheet"],
     "homepage": "https://github.com/Noctis/xtable",
     "license": "MIT",
     "authors": [
@@ -13,13 +13,20 @@
         }
     ],
     "require": {
-        "php": ">=7.3.0",
+        "php": "^7.4",
         "ext-mbstring": "*",
-        "phpoffice/phpexcel": "^1.8"
+        "phpoffice/phpspreadsheet": "^1.15"
+    },
+    "require-dev": {
+        "symfony/var-dumper": "^5.1",
+        "vimeo/psalm": "^4.1"
     },
     "autoload": {
         "psr-4": {
             "Noctis\\": "src/"
         }
+    },
+    "config": {
+        "sort-packages": true
     }
 }
