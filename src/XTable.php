@@ -279,7 +279,7 @@ final class XTable
             $coll = $this->coll;
         }
 
-        $firstDigit = floor($coll / 26);
+        $firstDigit = (int)floor($coll / 26);
         $secondDigit = (int)($coll - ($firstDigit * 26));
 
         $collName = '';
