@@ -26,11 +26,6 @@
             "Noctis\\XTable\\": "src/"
         }
     },
-    "extra": {
-        "branch-alias": {
-            "dev-dev": "2.0-dev"
-        }
-    },
     "config": {
         "sort-packages": true
     }
