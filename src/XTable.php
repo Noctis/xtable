@@ -1,5 +1,5 @@
 <?php declare(strict_types=1);
-namespace Noctis;
+namespace Noctis\XTable;
 
 use PhpOffice\PhpSpreadsheet\Comment;
 use PhpOffice\PhpSpreadsheet\RichText\Run;
@@ -957,12 +957,12 @@ final class XTable
             if ($isEmail) {
                 $this->sheet
                     ->getCell($cellCoords, true)
-                    ->getHyperlink('A1')
+                    ->getHyperlink()
                     ->setUrl('mailto:'. $value);
             } elseif ($isUrl) {
                 $this->sheet
                     ->getCell($cellCoords, true)
-                    ->getHyperlink('A1')
+                    ->getHyperlink()
                     ->setUrl($value);
             }
         }
