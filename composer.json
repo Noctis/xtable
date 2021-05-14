@@ -15,7 +15,7 @@
     "require": {
         "php": "^8.0",
         "ext-mbstring": "*",
-        "phpoffice/phpspreadsheet": "^1.15"
+        "phpoffice/phpspreadsheet": "^1.17"
     },
     "require-dev": {
         "symfony/var-dumper": "^5.1",
